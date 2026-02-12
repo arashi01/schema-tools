@@ -1,0 +1,84 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <PropertyGroup>
+    <!-- Default configuration file name -->
+    <SchemaToolsConfig Condition="'$(SchemaToolsConfig)' == ''">$(MSBuildProjectDirectory)\schema-tools.json</SchemaToolsConfig>
+
+    <!-- Default input location -->
+    <SchemaToolsTablesDirectory Condition="'$(SchemaToolsTablesDirectory)' == ''">$(MSBuildProjectDirectory)\Schema\Tables</SchemaToolsTablesDirectory>
+
+    <!-- Default output locations -->
+    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(MSBuildProjectDirectory)\Build\schema-metadata.json</SchemaToolsMetadataOutput>
+    <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(MSBuildProjectDirectory)\Docs\SCHEMA.md</SchemaToolsDocsOutput>
+    <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Triggers\_generated</SchemaToolsTriggersOutput>
+
+    <!-- Feature flags (can be overridden per project) -->
+    <SchemaToolsEnabled Condition="'$(SchemaToolsEnabled)' == ''">true</SchemaToolsEnabled>
+    <SchemaToolsGenerateMetadata Condition="'$(SchemaToolsGenerateMetadata)' == ''">true</SchemaToolsGenerateMetadata>
+    <SchemaToolsValidate Condition="'$(SchemaToolsValidate)' == ''">true</SchemaToolsValidate>
+    <SchemaToolsGenerateTriggers Condition="'$(SchemaToolsGenerateTriggers)' == ''">true</SchemaToolsGenerateTriggers>
+    <SchemaToolsGenerateDocs Condition="'$(SchemaToolsGenerateDocs)' == ''">true</SchemaToolsGenerateDocs>
+
+    <!-- Select the correct TFM based on the MSBuild runtime environment.
+         Full MSBuild (Visual Studio) runs on .NET Framework; dotnet build runs on .NET Core. -->
+    <SchemaTools_TFM Condition="'$(MSBuildRuntimeType)' != 'Core'">netstandard2.0</SchemaTools_TFM>
+    <SchemaTools_TFM Condition="'$(MSBuildRuntimeType)' == 'Core'">net10.0</SchemaTools_TFM>
+  </PropertyGroup>
+
+  <!-- Import task definitions using the runtime-appropriate assembly -->
+  <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataGenerator"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+
+  <UsingTask TaskName="SchemaTools.Tasks.SqlTriggerGenerator"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+
+  <UsingTask TaskName="SchemaTools.Tasks.SchemaValidator"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+
+  <UsingTask TaskName="SchemaTools.Tasks.MarkdownDocumentationGenerator"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+
+  <!-- Build targets -->
+  <Target Name="SchemaToolsGenerateMetadata"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsGenerateMetadata)' == 'true'">
+    <Message Text="SchemaTools: Generating metadata..." Importance="high" />
+    <SchemaTools.Tasks.SchemaMetadataGenerator
+      TablesDirectory="$(SchemaToolsTablesDirectory)"
+      TableFiles="@(SchemaToolsTableFile)"
+      OutputFile="$(SchemaToolsMetadataOutput)"
+      ConfigFile="$(SchemaToolsConfig)" />
+  </Target>
+
+  <Target Name="SchemaToolsValidate"
+          AfterTargets="SchemaToolsGenerateMetadata"
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsValidate)' == 'true'">
+    <Message Text="SchemaTools: Validating schema..." Importance="high" />
+    <SchemaTools.Tasks.SchemaValidator
+      MetadataFile="$(SchemaToolsMetadataOutput)"
+      ConfigFile="$(SchemaToolsConfig)" />
+  </Target>
+
+  <Target Name="SchemaToolsGenerateTriggers"
+          AfterTargets="SchemaToolsValidate"
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsGenerateTriggers)' == 'true'">
+    <Message Text="SchemaTools: Generating triggers..." Importance="high" />
+    <SchemaTools.Tasks.SqlTriggerGenerator
+      MetadataFile="$(SchemaToolsMetadataOutput)"
+      OutputDirectory="$(SchemaToolsTriggersOutput)"
+      CustomTriggersDirectory="$(MSBuildProjectDirectory)\Schema\Triggers\_custom"
+      Force="false" />
+  </Target>
+
+  <Target Name="SchemaToolsGenerateDocs"
+          AfterTargets="SchemaToolsGenerateTriggers"
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsGenerateDocs)' == 'true'">
+    <Message Text="SchemaTools: Generating documentation..." Importance="high" />
+    <SchemaTools.Tasks.MarkdownDocumentationGenerator
+      MetadataFile="$(SchemaToolsMetadataOutput)"
+      OutputFile="$(SchemaToolsDocsOutput)"
+      ConfigFile="$(SchemaToolsConfig)" />
+  </Target>
+
+</Project>

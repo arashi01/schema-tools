@@ -1,0 +1,23 @@
+﻿<Project>
+  <PropertyGroup>
+    <!-- Shared properties for all projects -->
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest</AnalysisLevel>
+
+    <!-- Versioning — derived from git tags by MinVer -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
+
+    <!-- Repository info -->
+    <Copyright>Copyright (c) Ali Rashid</Copyright>
+    <Authors>Ali Rashid</Authors>
+    <RepositoryUrl>https://github.com/arashi01/schema-tools</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="All" />
+  </ItemGroup>
+</Project>

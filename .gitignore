@@ -1,0 +1,47 @@
+﻿# Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+target/
+
+# Dotfiles
+.*
+!.gitignore
+!.gitattributes
+!.editorconfig
+!.github/
+
+# Visual Studio
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+# MSIX packaging
+AppPackages/
+BundleArtifacts/
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+*.msixupload
+
+# Publish output
+publish/
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Rider / JetBrains
+*.sln.iml

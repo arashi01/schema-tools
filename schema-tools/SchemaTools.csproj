@@ -1,0 +1,64 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <RootNamespace>SchemaTools</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SchemaTools.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- Package metadata -->
+    <PackageId>SchemaTools</PackageId>
+
+    <Product>SchemaTools</Product>
+    <Description>MSBuild tasks for generating metadata, triggers, and documentation from SQL Server database schemas. Supports temporal tables, soft delete patterns, and polymorphic relationships.</Description>
+    <PackageTags>sql-server;database;schema;msbuild;ssdt;temporal-tables;soft-delete;metadata;code-generation</PackageTags>
+    <PackageProjectUrl>https://github.com/arashi01/schema-tools</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- NuGet package settings -->
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+
+    <!-- Build settings -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <!-- MSBuild dependencies (reference assemblies only; MSBuild provides the runtime assembly) -->
+    <PackageReference Include="Microsoft.Build.Framework" Version="18.0.2" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.0.2" />
+
+    <!-- SQL Server ScriptDom for parsing T-SQL -->
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0" />
+
+    <!-- Source link for debugging -->
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
+  </ItemGroup>
+
+  <!-- System.Text.Json is in-box for net10.0 but must be referenced for netstandard2.0 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Text.Json" Version="9.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Include MSBuild targets in package -->
+    <None Include="build\**\*.targets" Pack="true" PackagePath="build\" />
+    <None Include="build\**\*.props" Pack="true" PackagePath="build\" />
+
+    <!-- Include README -->
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

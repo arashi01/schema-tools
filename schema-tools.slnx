@@ -1,0 +1,20 @@
+<Solution>
+
+  <Configurations>
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+
+  <Folder Name="/docs/" />
+  <Folder Name="/schema-tools/">
+    <Project Path="schema-tools/SchemaTools.csproj" Id="a2f28efa-99fe-47f0-8458-257ea6308f60" />
+  </Folder>
+  <Folder Name="/schema-tools-tests/">
+    <Project Path="schema-tools-tests/SchemaTools.Tests.csproj" Id="317bac9e-dadf-411d-b2f2-d9bef0db76cf" />
+  </Folder>  
+
+  <Folder Name="/.github/">
+    <!-- CI/CD configuration visible in solution -->
+  </Folder>  
+</Solution>

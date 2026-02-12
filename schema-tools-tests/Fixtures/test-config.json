@@ -1,0 +1,30 @@
+{
+  "database": "TestDB",
+  "defaultSchema": "test",
+  "sqlServerVersion": "Sql160",
+  
+  "features": {
+    "enableSoftDelete": true,
+    "enableTemporalVersioning": true,
+    "generateHardDeleteTriggers": true,
+    "detectPolymorphicPatterns": true,
+    "detectAppendOnlyTables": true
+  },
+  
+  "validation": {
+    "validateForeignKeys": true,
+    "validatePolymorphic": true,
+    "validateTemporal": true,
+    "validateAuditColumns": true,
+    "enforceNamingConventions": true,
+    "treatWarningsAsErrors": false
+  },
+  
+  "documentation": {
+    "enabled": true,
+    "includeErDiagrams": true,
+    "includeStatistics": true,
+    "includeConstraints": true,
+    "includeIndexes": false
+  }
+}
