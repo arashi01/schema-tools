@@ -9,10 +9,11 @@ MSBuild tasks for SQL Server schema metadata generation, validation, and documen
 
 - **Pattern detection** - soft-delete, polymorphic relationships, append-only tables, temporal versioning; all column names are configurable
 - **Cascade soft-delete triggers** - parent tables automatically propagate soft-delete to children via generated `AFTER UPDATE` triggers
+- **Active-record views** - generated views filter to `active = 1`, eliminating manual `WHERE` clauses in application queries
 - **Deferred purge procedure** - FK-safe hard-deletion in topological order via `usp_purge_soft_deleted` stored procedure with configurable grace period
 - **Schema validation** - FK referential integrity, circular FK detection, `snake_case` naming conventions, temporal structure, audit columns, polymorphic structure, primary key presence
 - **Documentation** - Markdown with Mermaid ER diagrams, category grouping, statistics, constraints
-- **Pre-build/post-build pipeline** - triggers and procedures generated pre-build (included in dacpac); validation and docs generated post-build from compiled dacpac
+- **Pre-build/post-build pipeline** - triggers, procedures, and views generated pre-build (included in dacpac); validation and docs generated post-build from compiled dacpac
 
 ## Architecture Overview
 
@@ -23,11 +24,12 @@ SchemaTools operates in two distinct phases:
 1. **SchemaToolsAnalyse** - Parses `@(Build)` SQL files via ScriptDom, builds FK dependency graph, detects soft-delete patterns
 2. **SchemaToolsGenerateTriggers** - Generates CASCADE soft-delete and reactivation guard triggers
 3. **SchemaToolsGenerateProcedures** - Generates `usp_purge_soft_deleted` stored procedure
-4. **SchemaToolsIncludeGenerated** - Adds generated files to `@(Build)` for dacpac compilation
+4. **SchemaToolsGenerateViews** - Generates active-record views for soft-delete tables
+5. **SchemaToolsIncludeGenerated** - Adds generated files to `@(Build)` for dacpac compilation
 
 ### Post-Build Phase (Dacpac -> Artifacts)
 
-5. **SchemaToolsExtractMetadata** - Extracts authoritative metadata from compiled `.dacpac` via DacFx/TSqlModel
+6. **SchemaToolsExtractMetadata** - Extracts authoritative metadata from compiled `.dacpac` via DacFx/TSqlModel
 6. **SchemaToolsValidate** - Validates the compiled schema
 7. **SchemaToolsGenerateDocs** - Generates Markdown documentation
 
@@ -69,6 +71,7 @@ Add to your `.sqlproj` to control build behaviour:
   <!-- Feature toggles -->
   <SchemaToolsGenerateTriggers>true</SchemaToolsGenerateTriggers>
   <SchemaToolsGenerateProcedures>true</SchemaToolsGenerateProcedures>
+  <SchemaToolsGenerateViews>true</SchemaToolsGenerateViews>
   <SchemaToolsValidate>true</SchemaToolsValidate>
   <SchemaToolsGenerateDocs>true</SchemaToolsGenerateDocs>
 </PropertyGroup>
@@ -87,6 +90,7 @@ Output strategy defaults by artifact:
 | ------------- | ------------------------------- | --------------------------------- |
 | Triggers      | `Schema/Triggers/_generated/`   | `obj/.../SchemaTools/Triggers/`   |
 | Procedures    | `Schema/Procedures/_generated/` | `obj/.../SchemaTools/Procedures/` |
+| Views         | `Schema/Views/_generated/`      | `obj/.../SchemaTools/Views/`      |
 | Metadata JSON | `Build/schema-metadata.json`    | `obj/.../schema-metadata.json`    |
 | Docs          | `Docs/SCHEMA.md`                | `bin/.../SCHEMA.md`               |
 
@@ -244,11 +248,12 @@ END
 
 SchemaTools generates triggers based on the configured `softDeleteMode`:
 
-| Trigger                  | Target        | Mode                 | Purpose                                        |
-| ------------------------ | ------------- | -------------------- | ---------------------------------------------- |
-| **Cascade soft-delete**  | Parent tables | `cascade`            | Propagates `active=0` to all FK children       |
-| **Restrict soft-delete** | Parent tables | `restrict`           | Blocks `active=0` if any active children exist |
-| **Reactivation guard**   | Child tables  | `cascade`/`restrict` | Blocks `active=0->1` if any parent is inactive |
+| Trigger                     | Target        | Mode                 | Purpose                                              |
+| --------------------------- | ------------- | -------------------- | ---------------------------------------------------- |
+| **Cascade soft-delete**     | Parent tables | `cascade`            | Propagates `active=0` to all FK children             |
+| **Restrict soft-delete**    | Parent tables | `restrict`           | Blocks `active=0` if any active children exist       |
+| **Reactivation guard**      | Child tables  | `cascade`/`restrict` | Blocks `active=0->1` if any parent is inactive       |
+| **Reactivation cascade**    | Parent tables | per-table opt-in     | Auto-reactivates children when parent is reactivated |
 
 ### Parent Tables (CASCADE Triggers)
 
@@ -329,6 +334,60 @@ GO
 
 This ensures that the soft-delete hierarchy is always consistent: you can only reactivate a child after reactivating its parent.
 
+### Reactivation Cascade (Opt-in)
+
+For 1:1 relationships (e.g., `user` -> `user_profile`), you may want to auto-reactivate children when the parent is reactivated. Enable per-table via overrides:
+
+```json
+{
+  "overrides": {
+    "users": {
+      "features": { "reactivationCascade": true, "reactivationCascadeToleranceMs": 2000 }
+    }
+  }
+}
+```
+
+The generated trigger only reactivates children that were soft-deleted **at the same time** as the parent (within the configured tolerance, default 2000ms, based on `valid_to` timestamp):
+
+```sql
+CREATE TRIGGER [dbo].[trg_users_cascade_reactivation]
+ON [dbo].[users]
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF NOT UPDATE(active)
+        RETURN;
+
+    -- Only proceed if rows were reactivated (active: 0 -> 1)
+    IF NOT EXISTS (
+        SELECT 1 FROM inserted i
+        JOIN deleted d ON i.id = d.id
+        WHERE i.active = 1 AND d.active = 0
+    )
+        RETURN;
+
+    -- Cascade reactivation to [dbo].[user_profile]
+    -- Only reactivate children deleted at the same time (within 2000ms)
+    UPDATE c
+    SET c.active = 1, c.updated_by = @updated_by
+    FROM [dbo].[user_profile] c
+    WHERE EXISTS (
+        SELECT 1 FROM inserted i
+        JOIN deleted d ON i.id = d.id
+        WHERE i.active = 1 AND d.active = 0
+        AND c.user_id = i.id
+        AND ABS(DATEDIFF(MILLISECOND, c.valid_to, d.valid_to)) <= 2000
+    )
+    AND c.active = 0;
+END;
+GO
+```
+
+**Design rationale**: The timestamp matching prevents unintended resurrection of records that were explicitly deleted before the parent. For 1:many relationships (e.g., `user` -> `addresses`), leave this disabled and handle reactivation at the application layer.
+
 ### Leaf Tables
 
 Tables with no FK children do **not** receive cascade triggers - there's nothing to cascade. However, if they have FK references to soft-delete parents, they still receive reactivation guard triggers.
@@ -379,6 +438,7 @@ These properties are set in your `.sqlproj` file and control build integration.
 | `SchemaToolsEnabled`                  | `true`                                         | Master enable/disable for all SchemaTools functionality              |
 | `SchemaToolsOutputStrategy`           | `Source`                                       | `Source` (committed to VCS) or `Intermediate` (transient in obj/bin) |
 | `SchemaToolsGenerateTriggers`         | `true`                                         | Generate soft-delete triggers                                        |
+| `SchemaToolsGenerateViews`            | `true`                                         | Generate active-record views for soft-delete tables                  |
 | `SchemaToolsGenerateProcedures`       | `true`                                         | Generate purge stored procedure                                      |
 | `SchemaToolsValidate`                 | `true`                                         | Run schema validation post-build                                     |
 | `SchemaToolsGenerateDocs`             | `true`                                         | Generate Markdown documentation                                      |
@@ -390,6 +450,7 @@ These properties are set in your `.sqlproj` file and control build integration.
 | Property                      | Source Default                 | Intermediate Default                              |
 | ----------------------------- | ------------------------------ | ------------------------------------------------- |
 | `SchemaToolsTriggersOutput`   | `Schema\Triggers\_generated`   | `$(IntermediateOutputPath)SchemaTools\Triggers`   |
+| `SchemaToolsViewsOutput`      | `Schema\Views\_generated`      | `$(IntermediateOutputPath)SchemaTools\Views`      |
 | `SchemaToolsProceduresOutput` | `Schema\Procedures\_generated` | `$(IntermediateOutputPath)SchemaTools\Procedures` |
 | `SchemaToolsMetadataOutput`   | `Build\schema-metadata.json`   | `$(IntermediateOutputPath)schema-metadata.json`   |
 | `SchemaToolsDocsOutput`       | `Docs\SCHEMA.md`               | `$(OutputPath)SCHEMA.md`                          |
@@ -403,6 +464,8 @@ These properties are set in your `.sqlproj` file and control build integration.
 | `detectPolymorphicPatterns`  | `true`      | Detect polymorphic relationships (`owner_type`/`owner_id`)                                                         |
 | `detectAppendOnlyTables`     | `true`      | Detect append-only tables (has `created_at`, no `updated_by`, non-temporal)                                        |
 | `generateReactivationGuards` | `true`      | Generate reactivation guard triggers for child tables                                                              |
+| `reactivationCascade`        | `false`     | Auto-reactivate children when parent is reactivated (per-table via overrides)                                      |
+| `reactivationCascadeToleranceMs` | `2000`  | Timestamp tolerance in milliseconds for reactivation cascade matching                                              |
 | `softDeleteMode`             | `"cascade"` | Trigger behaviour: `cascade` (propagate to children), `restrict` (block if children exist), `ignore` (no triggers) |
 
 ### Purge
@@ -415,6 +478,30 @@ Settings for the centralized purge procedure that handles hard-deletion.
 | `procedureName`          | `"usp_purge_soft_deleted"` | Name of the generated purge procedure                          |
 | `defaultGracePeriodDays` | `90`                       | Default grace period before soft-deleted records can be purged |
 | `defaultBatchSize`       | `1000`                     | Default batch size for deletion operations                     |
+
+### Views
+
+Settings for auto-generated views that filter to active records, eliminating manual `WHERE active = 1` clauses.
+
+| Setting                    | Default                 | Description                                                                |
+| -------------------------- | ----------------------- | -------------------------------------------------------------------------- |
+| `enabled`                  | `true`                  | Generate views for soft-delete tables                                      |
+| `namingPattern`            | `"vw_{table}"`          | View name pattern (`{table}` replaced with table name)                     |
+| `includeDeletedViews`      | `false`                 | Also generate views for deleted records (`active = 0`)                     |
+| `deletedViewNamingPattern` | `"vw_{table}_deleted"`  | Deleted view name pattern                                                  |
+
+**Explicit-wins policy**: If you define a view matching the naming pattern (e.g., `vw_users`), SchemaTools will not generate a conflicting view for that table.
+
+**Example output** for a table `dbo.users` with soft-delete:
+
+```sql
+CREATE VIEW [dbo].[vw_users]
+AS
+SELECT *
+FROM [dbo].[users]
+WHERE [active] = 1;
+GO
+```
 
 ### Validation
 
@@ -569,6 +656,7 @@ Detected when a non-temporal table has the configured `createdAt` column (defaul
 | `SchemaToolsMetadataOutput`   | `$(MSBuildProjectDirectory)\Build\schema-metadata.json`   | Post-build metadata from dacpac   |
 | `SchemaToolsDocsOutput`       | `$(MSBuildProjectDirectory)\Docs\SCHEMA.md`               | Generated documentation           |
 | `SchemaToolsTriggersOutput`   | `$(MSBuildProjectDirectory)\Schema\Triggers\_generated`   | Generated triggers                |
+| `SchemaToolsViewsOutput`      | `$(MSBuildProjectDirectory)\Schema\Views\_generated`      | Generated views                   |
 | `SchemaToolsProceduresOutput` | `$(MSBuildProjectDirectory)\Schema\Procedures\_generated` | Generated procedures              |
 
 ### Feature Flags
@@ -579,6 +667,7 @@ Disable individual pipeline stages:
 <PropertyGroup>
   <SchemaToolsEnabled>false</SchemaToolsEnabled>                      <!-- All stages -->
   <SchemaToolsGenerateTriggers>false</SchemaToolsGenerateTriggers>    <!-- Cascade triggers -->
+  <SchemaToolsGenerateViews>false</SchemaToolsGenerateViews>          <!-- Active-record views -->
   <SchemaToolsGenerateProcedures>false</SchemaToolsGenerateProcedures><!-- Purge procedure -->
   <SchemaToolsValidate>false</SchemaToolsValidate>                    <!-- Post-build validation -->
   <SchemaToolsGenerateDocs>false</SchemaToolsGenerateDocs>            <!-- Documentation -->
@@ -593,6 +682,7 @@ Disable individual pipeline stages:
   <SchemaToolsMetadataOutput>$(MSBuildProjectDirectory)\custom\metadata.json</SchemaToolsMetadataOutput>
   <SchemaToolsDocsOutput>$(MSBuildProjectDirectory)\custom\docs.md</SchemaToolsDocsOutput>
   <SchemaToolsTriggersOutput>$(MSBuildProjectDirectory)\custom\triggers</SchemaToolsTriggersOutput>
+  <SchemaToolsViewsOutput>$(MSBuildProjectDirectory)\custom\views</SchemaToolsViewsOutput>
   <SchemaToolsProceduresOutput>$(MSBuildProjectDirectory)\custom\procedures</SchemaToolsProceduresOutput>
 </PropertyGroup>
 ```
@@ -601,11 +691,11 @@ Validation settings are controlled exclusively through `schema-tools.json`.
 
 ## Generated Code Management
 
-SchemaTools follows an **explicit-wins** policy: user-defined triggers always take precedence over generated ones.
+SchemaTools follows an **explicit-wins** policy: user-defined triggers and views always take precedence over generated ones.
 
 ### How It Works
 
-During the analysis phase, SchemaTools scans all `@(Build)` items for existing `CREATE TRIGGER` statements. If a trigger with the same name as one we would generate is found **outside** the `_generated/` directory, generation is skipped and the source location is logged:
+During the analysis phase, SchemaTools scans all `@(Build)` items for existing `CREATE TRIGGER` and `CREATE VIEW` statements. If a trigger or view with the same name as one we would generate is found **outside** the `_generated/` directory, generation is skipped and the source location is logged:
 
 ```
 - Skipped [dbo].[trg_users_cascade_soft_delete]: Explicit definition found
@@ -630,6 +720,11 @@ Schema/
       trg_users_cascade_soft_delete.sql      <- Cascade trigger for parent
       trg_orders_reactivation_guard.sql      <- Guard trigger for child
     my_custom_triggers.sql                   <- Your triggers (takes precedence)
+  Views/
+    _generated/                              <- Auto-generated active-record views
+      vw_users.sql                           <- SELECT * WHERE active = 1
+      vw_orders.sql
+    my_custom_views.sql                      <- Your views (takes precedence)
   Procedures/
     _generated/                              <- Auto-generated purge procedure
       usp_purge_soft_deleted.sql

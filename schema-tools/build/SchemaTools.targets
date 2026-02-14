@@ -21,6 +21,7 @@
     <!-- Feature toggles -->
     <SchemaToolsGenerateTriggers Condition="'$(SchemaToolsGenerateTriggers)' == ''">true</SchemaToolsGenerateTriggers>
     <SchemaToolsGenerateProcedures Condition="'$(SchemaToolsGenerateProcedures)' == ''">true</SchemaToolsGenerateProcedures>
+    <SchemaToolsGenerateViews Condition="'$(SchemaToolsGenerateViews)' == ''">true</SchemaToolsGenerateViews>
     <SchemaToolsValidate Condition="'$(SchemaToolsValidate)' == ''">true</SchemaToolsValidate>
     <SchemaToolsGenerateDocs Condition="'$(SchemaToolsGenerateDocs)' == ''">true</SchemaToolsGenerateDocs>
     <SchemaToolsExtractPostBuildMetadata Condition="'$(SchemaToolsExtractPostBuildMetadata)' == ''">true</SchemaToolsExtractPostBuildMetadata>
@@ -41,6 +42,7 @@
   <PropertyGroup Condition="'$(SchemaToolsOutputStrategy)' == 'Source'">
     <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Triggers\_generated</SchemaToolsTriggersOutput>
     <SchemaToolsProceduresOutput Condition="'$(SchemaToolsProceduresOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Procedures\_generated</SchemaToolsProceduresOutput>
+    <SchemaToolsViewsOutput Condition="'$(SchemaToolsViewsOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Views\_generated</SchemaToolsViewsOutput>
     <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(MSBuildProjectDirectory)\Build\schema-metadata.json</SchemaToolsMetadataOutput>
     <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(MSBuildProjectDirectory)\Docs\SCHEMA.md</SchemaToolsDocsOutput>
   </PropertyGroup>
@@ -49,6 +51,7 @@
   <PropertyGroup Condition="'$(SchemaToolsOutputStrategy)' == 'Intermediate'">
     <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(IntermediateOutputPath)SchemaTools\Triggers</SchemaToolsTriggersOutput>
     <SchemaToolsProceduresOutput Condition="'$(SchemaToolsProceduresOutput)' == ''">$(IntermediateOutputPath)SchemaTools\Procedures</SchemaToolsProceduresOutput>
+    <SchemaToolsViewsOutput Condition="'$(SchemaToolsViewsOutput)' == ''">$(IntermediateOutputPath)SchemaTools\Views</SchemaToolsViewsOutput>
     <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(IntermediateOutputPath)schema-metadata.json</SchemaToolsMetadataOutput>
     <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(OutputPath)SCHEMA.md</SchemaToolsDocsOutput>
   </PropertyGroup>
@@ -83,6 +86,9 @@
   <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataGenerator"
              AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
 
+  <UsingTask TaskName="SchemaTools.Tasks.SqlViewGenerator"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+
   <!-- =============================================================================
        PRE-BUILD TARGETS
        These run before SqlBuild to generate triggers and procedures that will be
@@ -92,12 +98,13 @@
   <!-- Phase 1: Analyse source files to build FK graph and detect patterns -->
   <Target Name="SchemaToolsAnalyse"
           BeforeTargets="BeforeBuild"
-          Condition="'$(SchemaToolsEnabled)' == 'true' AND ('$(SchemaToolsGenerateTriggers)' == 'true' OR '$(SchemaToolsGenerateProcedures)' == 'true')">
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND ('$(SchemaToolsGenerateTriggers)' == 'true' OR '$(SchemaToolsGenerateProcedures)' == 'true' OR '$(SchemaToolsGenerateViews)' == 'true')">
     <Message Text="SchemaTools: Analysing source files..." Importance="high" />
     <SchemaTools.Tasks.SchemaSourceAnalyser
       SqlFiles="@(Build)"
       AnalysisOutput="$(SchemaToolsAnalysisOutput)"
       GeneratedTriggersDirectory="$(SchemaToolsTriggersOutput)"
+      GeneratedViewsDirectory="$(SchemaToolsViewsOutput)"
       ConfigFile="$(SchemaToolsConfig)" />
   </Target>
 
@@ -126,9 +133,21 @@
       Force="false" />
   </Target>
 
+  <!-- Phase 3.5: Generate active-record views for soft-delete tables -->
+  <Target Name="SchemaToolsGenerateViews"
+          AfterTargets="SchemaToolsGenerateProcedures"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsGenerateViews)' == 'true'">
+    <Message Text="SchemaTools: Generating active-record views..." Importance="high" />
+    <SchemaTools.Tasks.SqlViewGenerator
+      AnalysisFile="$(SchemaToolsAnalysisOutput)"
+      OutputDirectory="$(SchemaToolsViewsOutput)"
+      Force="false" />
+  </Target>
+
   <!-- Phase 4: Include generated files in the build -->
   <Target Name="SchemaToolsIncludeGenerated"
-          AfterTargets="SchemaToolsGenerateProcedures"
+          AfterTargets="SchemaToolsGenerateViews"
           BeforeTargets="BeforeBuild"
           Condition="'$(SchemaToolsEnabled)' == 'true'">
     <ItemGroup>
@@ -136,6 +155,8 @@
              Condition="Exists('$(SchemaToolsTriggersOutput)')" />
       <Build Include="$(SchemaToolsProceduresOutput)\**\*.sql"
              Condition="Exists('$(SchemaToolsProceduresOutput)')" />
+      <Build Include="$(SchemaToolsViewsOutput)\**\*.sql"
+             Condition="Exists('$(SchemaToolsViewsOutput)')" />
     </ItemGroup>
   </Target>
 

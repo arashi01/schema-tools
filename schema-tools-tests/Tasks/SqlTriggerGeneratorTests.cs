@@ -674,6 +674,286 @@ public class SqlTriggerGeneratorTests : IDisposable
     File.Exists(Path.Combine(_outputDir, "trg_orders_reactivation_guard.sql")).Should().BeFalse();
   }
 
+  // --- Reactivation Cascade Trigger Tests ----------------------------------
+
+  [Fact]
+  public void Execute_GeneratesReactivationCascadeTrigger_WhenEnabled()
+  {
+    // Arrange: Parent table with ReactivationCascade enabled
+    TableAnalysis parent = new()
+    {
+      Name = "users",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "active",
+      ValidToColumn = "valid_to",
+      PrimaryKeyColumns = ["id"],
+      ChildTables = ["orders"],
+      ReactivationCascade = true,
+      SoftDeleteMode = SoftDeleteMode.Cascade
+    };
+    TableAnalysis child = LeafTable("orders", "user_id", "users");
+    child.ValidToColumn = "valid_to";
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    task.Execute().Should().BeTrue();
+
+    // Assert: reactivation cascade trigger generated
+    string file = Path.Combine(_outputDir, "trg_users_cascade_reactivation.sql");
+    File.Exists(file).Should().BeTrue();
+    string content = File.ReadAllText(file);
+    content.Should().Contain("trg_users_cascade_reactivation");
+    content.Should().Contain("AFTER UPDATE");
+    // Verify timestamp matching logic is present
+    content.Should().Contain("DATEDIFF(MILLISECOND");
+    content.Should().Contain("valid_to");
+  }
+
+  [Fact]
+  public void Execute_DoesNotGenerateReactivationCascade_WhenDisabled()
+  {
+    // Arrange: Parent table without ReactivationCascade
+    TableAnalysis parent = ParentTable("users", "orders");
+    parent.ReactivationCascade = false;
+    TableAnalysis child = LeafTable("orders", "user_id", "users");
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    task.Execute().Should().BeTrue();
+
+    // Assert: reactivation cascade trigger NOT generated
+    File.Exists(Path.Combine(_outputDir, "trg_users_cascade_reactivation.sql")).Should().BeFalse();
+    // But cascade soft-delete still generated
+    File.Exists(Path.Combine(_outputDir, "trg_users_cascade_soft_delete.sql")).Should().BeTrue();
+  }
+
+  [Fact]
+  public void Execute_ReactivationCascade_IncludesTimestampMatchingLogic()
+  {
+    // Arrange
+    TableAnalysis parent = new()
+    {
+      Name = "accounts",
+      Schema = "dbo",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "active",
+      ValidToColumn = "valid_to",
+      PrimaryKeyColumns = ["id"],
+      ChildTables = ["profiles", "settings"],
+      ReactivationCascade = true
+    };
+    TableAnalysis profile = new()
+    {
+      Name = "profiles",
+      Schema = "dbo",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "active",
+      ValidToColumn = "valid_to",
+      PrimaryKeyColumns = ["id"],
+      ForeignKeyReferences =
+      [
+        new ForeignKeyRef { ReferencedTable = "accounts", Columns = ["account_id"], ReferencedColumns = ["id"] }
+      ]
+    };
+    TableAnalysis settings = new()
+    {
+      Name = "settings",
+      Schema = "dbo",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "active",
+      ValidToColumn = "valid_to",
+      PrimaryKeyColumns = ["id"],
+      ForeignKeyReferences =
+      [
+        new ForeignKeyRef { ReferencedTable = "accounts", Columns = ["account_id"], ReferencedColumns = ["id"] }
+      ]
+    };
+    SourceAnalysisResult analysis = CreateAnalysis(parent, profile, settings);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    task.Execute().Should().BeTrue();
+
+    // Assert
+    string file = Path.Combine(_outputDir, "trg_accounts_cascade_reactivation.sql");
+    File.Exists(file).Should().BeTrue();
+    string content = File.ReadAllText(file);
+
+    // Should reference both child tables
+    content.Should().Contain("[dbo].[profiles]");
+    content.Should().Contain("[dbo].[settings]");
+    // Should check for reactivation (active: 0 -> 1)
+    content.Should().Contain("i.active = 1 AND d.active = 0");
+    // Should have default tolerance for timestamp matching
+    content.Should().Contain("<= 2000");
+    // Should set children to active
+    content.Should().Contain("c.active = 1");
+  }
+
+  [Fact]
+  public void Execute_ReactivationCascade_RespectedExplicitWins()
+  {
+    // Arrange: Explicit trigger exists
+    TableAnalysis parent = new()
+    {
+      Name = "users",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      PrimaryKeyColumns = ["id"],
+      ChildTables = ["orders"],
+      ReactivationCascade = true
+    };
+    TableAnalysis child = LeafTable("orders", "user_id", "users");
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    analysis.ExistingTriggers.Add(new ExistingTrigger
+    {
+      Name = "trg_users_cascade_reactivation",
+      Schema = "test",
+      TargetTable = "users",
+      SourceFile = "my_triggers.sql",
+      IsGenerated = false
+    });
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    task.Execute().Should().BeTrue();
+
+    // Assert: trigger not generated due to explicit-wins
+    File.Exists(Path.Combine(_outputDir, "trg_users_cascade_reactivation.sql")).Should().BeFalse();
+  }
+
+  [Fact]
+  public void Execute_ReactivationCascade_SkipsChildWithoutSoftDelete()
+  {
+    // Arrange: Child without soft-delete
+    TableAnalysis parent = new()
+    {
+      Name = "users",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      PrimaryKeyColumns = ["id"],
+      ChildTables = ["audit_log"],
+      ReactivationCascade = true
+    };
+    TableAnalysis child = new()
+    {
+      Name = "audit_log",
+      Schema = "test",
+      HasSoftDelete = false, // No soft-delete
+      PrimaryKeyColumns = ["id"],
+      ForeignKeyReferences =
+      [
+        new ForeignKeyRef { ReferencedTable = "users", Columns = ["user_id"], ReferencedColumns = ["id"] }
+      ]
+    };
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    task.Execute().Should().BeTrue();
+
+    // Assert: trigger generated but child is skipped in comments
+    string file = Path.Combine(_outputDir, "trg_users_cascade_reactivation.sql");
+    File.Exists(file).Should().BeTrue();
+    string content = File.ReadAllText(file);
+    content.Should().Contain("Skipping audit_log: Does not have soft-delete enabled");
+  }
+
+  [Fact]
+  public void Execute_ReactivationCascade_SupportsCompositeFK()
+  {
+    // Arrange: Composite FK relationship
+    TableAnalysis parent = new()
+    {
+      Name = "tenant_users",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "active",
+      ValidToColumn = "valid_to",
+      PrimaryKeyColumns = ["tenant_id", "user_id"],
+      ChildTables = ["tenant_user_roles"],
+      ReactivationCascade = true
+    };
+    TableAnalysis child = new()
+    {
+      Name = "tenant_user_roles",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "active",
+      ValidToColumn = "valid_to",
+      PrimaryKeyColumns = ["id"],
+      ForeignKeyReferences =
+      [
+        new ForeignKeyRef
+        {
+          ReferencedTable = "tenant_users",
+          Columns = ["tenant_id", "user_id"],
+          ReferencedColumns = ["tenant_id", "user_id"]
+        }
+      ]
+    };
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    task.Execute().Should().BeTrue();
+
+    // Assert: trigger uses proper composite FK join
+    string file = Path.Combine(_outputDir, "trg_tenant_users_cascade_reactivation.sql");
+    File.Exists(file).Should().BeTrue();
+    string content = File.ReadAllText(file);
+    content.Should().Contain("c.tenant_id = i.tenant_id");
+    content.Should().Contain("c.user_id = i.user_id");
+  }
+
+  [Fact]
+  public void Execute_ReactivationCascade_UsesCustomTolerance()
+  {
+    // Arrange: Custom tolerance of 500ms
+    TableAnalysis parent = new()
+    {
+      Name = "users",
+      Schema = "dbo",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "active",
+      ValidToColumn = "valid_to",
+      PrimaryKeyColumns = ["id"],
+      ChildTables = ["orders"],
+      ReactivationCascade = true,
+      ReactivationCascadeToleranceMs = 500,
+      SoftDeleteMode = SoftDeleteMode.Cascade
+    };
+    TableAnalysis child = LeafTable("orders", "user_id", "users");
+    child.ValidToColumn = "valid_to";
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    task.Execute().Should().BeTrue();
+
+    // Assert: trigger uses custom tolerance
+    string file = Path.Combine(_outputDir, "trg_users_cascade_reactivation.sql");
+    File.Exists(file).Should().BeTrue();
+    string content = File.ReadAllText(file);
+    content.Should().Contain("DATEDIFF(MILLISECOND");
+    content.Should().Contain("<= 500");
+    content.Should().NotContain("<= 2000");
+    // Header comment should reference 500ms
+    content.Should().Contain("500ms");
+  }
+
   public void Dispose()
   {
     string root = Path.GetDirectoryName(_outputDir)!;

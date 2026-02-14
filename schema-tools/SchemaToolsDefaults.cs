@@ -113,4 +113,28 @@ public static class SchemaToolsDefaults
   /// Default FK on-delete action.
   /// </summary>
   public const string ForeignKeyOnDeleteDefault = "NoAction";
+
+  // ===========================================================================
+  // View Generation
+  // ===========================================================================
+
+  /// <summary>
+  /// Default view naming pattern. {table} is replaced with the table name.
+  /// </summary>
+  public const string ViewNamingPattern = "vw_{table}";
+
+  /// <summary>
+  /// Default deleted view naming pattern for soft-deleted records.
+  /// </summary>
+  public const string DeletedViewNamingPattern = "vw_{table}_deleted";
+
+  // ===========================================================================
+  // Reactivation Cascade
+  // ===========================================================================
+
+  /// <summary>
+  /// Default tolerance (in milliseconds) for matching child soft-delete timestamps
+  /// to the parent during reactivation cascade.
+  /// </summary>
+  public const int ReactivationCascadeToleranceMs = 2000;
 }

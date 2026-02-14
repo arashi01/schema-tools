@@ -81,6 +81,12 @@ public class SchemaToolsConfig
   public PurgeConfig Purge { get; set; } = new();
 
   /// <summary>
+  /// Active-record views configuration
+  /// </summary>
+  [JsonPropertyName("views")]
+  public ViewsConfig Views { get; set; } = new();
+
+  /// <summary>
   /// Custom category descriptions
   /// </summary>
   [JsonPropertyName("categories")]
@@ -169,6 +175,8 @@ public class SchemaToolsConfig
         EnableTemporalVersioning = Features.EnableTemporalVersioning,
         SoftDeleteMode = Features.SoftDeleteMode,
         GenerateReactivationGuards = Features.GenerateReactivationGuards,
+        ReactivationCascade = Features.ReactivationCascade,
+        ReactivationCascadeToleranceMs = Features.ReactivationCascadeToleranceMs,
         DetectPolymorphicPatterns = Features.DetectPolymorphicPatterns,
         DetectAppendOnlyTables = Features.DetectAppendOnlyTables
       },
@@ -184,6 +192,7 @@ public class SchemaToolsConfig
       Documentation = Documentation,
       Columns = Columns,
       Purge = Purge,
+      Views = Views,
       Categories = Categories,
       Overrides = Overrides
     };
@@ -199,6 +208,8 @@ public class SchemaToolsConfig
       EnableTemporalVersioning = over.EnableTemporalVersioning ?? baseConfig.EnableTemporalVersioning,
       SoftDeleteMode = over.SoftDeleteMode ?? baseConfig.SoftDeleteMode,
       GenerateReactivationGuards = over.GenerateReactivationGuards ?? baseConfig.GenerateReactivationGuards,
+      ReactivationCascade = over.ReactivationCascade ?? baseConfig.ReactivationCascade,
+      ReactivationCascadeToleranceMs = over.ReactivationCascadeToleranceMs ?? baseConfig.ReactivationCascadeToleranceMs,
       DetectPolymorphicPatterns = over.DetectPolymorphicPatterns ?? baseConfig.DetectPolymorphicPatterns,
       DetectAppendOnlyTables = over.DetectAppendOnlyTables ?? baseConfig.DetectAppendOnlyTables
     };
@@ -259,6 +270,22 @@ public class FeatureConfig
   /// </summary>
   [JsonPropertyName("detectAppendOnlyTables")]
   public bool DetectAppendOnlyTables { get; set; } = true;
+
+  /// <summary>
+  /// Enable reactivation cascade for parent tables (default: false).
+  /// When enabled via per-table overrides, reactivating a parent will
+  /// auto-reactivate children that were soft-deleted at the same time.
+  /// </summary>
+  [JsonPropertyName("reactivationCascade")]
+  public bool ReactivationCascade { get; set; } = false;
+
+  /// <summary>
+  /// Tolerance in milliseconds for matching child soft-delete timestamps to the parent
+  /// during reactivation cascade. Only children whose valid_to is within this tolerance
+  /// of the parent's valid_to are reactivated.
+  /// </summary>
+  [JsonPropertyName("reactivationCascadeToleranceMs")]
+  public int ReactivationCascadeToleranceMs { get; set; } = SchemaToolsDefaults.ReactivationCascadeToleranceMs;
 }
 
 public class ValidationConfig
@@ -491,12 +518,57 @@ public class FeatureOverrideConfig
   /// </summary>
   [JsonPropertyName("generateReactivationGuards")]
   public bool? GenerateReactivationGuards { get; set; }
+  /// <summary>
+  /// Enable reactivation cascade for this table.
+  /// When true, reactivating this parent will also reactivate children that
+  /// were soft-deleted within the configured tolerance of the parent.
+  /// </summary>
+  [JsonPropertyName("reactivationCascade")]
+  public bool? ReactivationCascade { get; set; }
+
+  /// <summary>
+  /// Override the reactivation cascade timestamp tolerance in milliseconds.
+  /// </summary>
+  [JsonPropertyName("reactivationCascadeToleranceMs")]
+  public int? ReactivationCascadeToleranceMs { get; set; }
 
   [JsonPropertyName("detectPolymorphicPatterns")]
   public bool? DetectPolymorphicPatterns { get; set; }
 
   [JsonPropertyName("detectAppendOnlyTables")]
   public bool? DetectAppendOnlyTables { get; set; }
+}
+
+/// <summary>
+/// Active-record views configuration for soft-delete tables.
+/// Generated views filter to active records only, eliminating the need for
+/// WHERE active = 1 in application queries.
+/// </summary>
+public class ViewsConfig
+{
+  /// <summary>
+  /// Generate active-record views for soft-delete tables.
+  /// </summary>
+  [JsonPropertyName("enabled")]
+  public bool Enabled { get; set; } = true;
+
+  /// <summary>
+  /// Naming pattern for generated views. {table} is replaced with the table name.
+  /// </summary>
+  [JsonPropertyName("namingPattern")]
+  public string NamingPattern { get; set; } = SchemaToolsDefaults.ViewNamingPattern;
+
+  /// <summary>
+  /// Generate companion views for soft-deleted records (for audit/admin use).
+  /// </summary>
+  [JsonPropertyName("includeDeletedViews")]
+  public bool IncludeDeletedViews { get; set; } = false;
+
+  /// <summary>
+  /// Naming pattern for deleted-record views. {table} is replaced with the table name.
+  /// </summary>
+  [JsonPropertyName("deletedViewNamingPattern")]
+  public string DeletedViewNamingPattern { get; set; } = SchemaToolsDefaults.DeletedViewNamingPattern;
 }
 
 /// <summary>
