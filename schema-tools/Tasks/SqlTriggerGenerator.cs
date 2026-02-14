@@ -79,6 +79,7 @@ public class SqlTriggerGenerator : MSTask
       int cascadeGenerated = 0;
       int restrictGenerated = 0;
       int guardGenerated = 0;
+      int reactivationCascadeGenerated = 0;
       int skippedIgnore = 0;
       int skippedExplicit = 0;
       int skippedExists = 0;
@@ -204,21 +205,67 @@ public class SqlTriggerGenerator : MSTask
         }
       }
 
+      // ============================================================================
+      // PHASE 3: Reactivation Cascade Triggers (for parent tables with ReactivationCascade enabled)
+      // ============================================================================
+
+      // Parent tables with ReactivationCascade enabled and children
+      var reactivationCascadeTables = analysis.Tables
+        .Where(t => t.HasSoftDelete && t.ReactivationCascade && t.ChildTables.Count > 0)
+        .ToList();
+
+      if (reactivationCascadeTables.Count > 0)
+      {
+        Log.LogMessage(MessageImportance.High, string.Empty);
+        Log.LogMessage(MessageImportance.High, $"Phase 3: REACTIVATION CASCADE triggers for {reactivationCascadeTables.Count} parent table(s)");
+
+        foreach (TableAnalysis parent in reactivationCascadeTables)
+        {
+          string triggerName = $"trg_{parent.Name}_cascade_reactivation";
+          string fileName = $"{triggerName}.sql";
+          string filePath = Path.Combine(OutputDirectory, fileName);
+
+          // EXPLICIT WINS
+          if (explicitTriggers.TryGetValue(triggerName, out ExistingTrigger? explicitTrigger))
+          {
+            Log.LogMessage(MessageImportance.High,
+              $"  - Skipped [{triggerName}]: Explicit definition at {explicitTrigger.SourceFile}");
+            skippedExplicit++;
+            continue;
+          }
+
+          if (File.Exists(filePath) && !Force)
+          {
+            Log.LogMessage(MessageImportance.Low, $"  Skipped {parent.Name}: Already exists");
+            skippedExists++;
+            continue;
+          }
+
+          // Generate reactivation cascade trigger
+          string triggerSql = GenerateReactivationCascadeTrigger(parent, tableLookup, analysis.Columns);
+          File.WriteAllText(filePath, triggerSql, Encoding.UTF8);
+
+          Log.LogMessage($"  + {fileName} (cascades to {parent.ChildTables.Count} children)");
+          reactivationCascadeGenerated++;
+        }
+      }
+
       // Summary
       Log.LogMessage(MessageImportance.High, string.Empty);
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, "  Summary");
       Log.LogMessage(MessageImportance.High, "============================================================");
-      Log.LogMessage(MessageImportance.High, $"Cascade triggers:     {cascadeGenerated}");
-      Log.LogMessage(MessageImportance.High, $"Restrict triggers:    {restrictGenerated}");
-      Log.LogMessage(MessageImportance.High, $"Reactivation guards:  {guardGenerated}");
+      Log.LogMessage(MessageImportance.High, $"Cascade triggers:           {cascadeGenerated}");
+      Log.LogMessage(MessageImportance.High, $"Restrict triggers:          {restrictGenerated}");
+      Log.LogMessage(MessageImportance.High, $"Reactivation guards:        {guardGenerated}");
+      Log.LogMessage(MessageImportance.High, $"Reactivation cascades:      {reactivationCascadeGenerated}");
       if (skippedIgnore > 0)
-        Log.LogMessage(MessageImportance.High, $"Ignored (by config):  {skippedIgnore}");
+        Log.LogMessage(MessageImportance.High, $"Ignored (by config):        {skippedIgnore}");
       if (skippedExplicit > 0)
-        Log.LogMessage(MessageImportance.High, $"Explicit overrides:   {skippedExplicit}");
+        Log.LogMessage(MessageImportance.High, $"Explicit overrides:         {skippedExplicit}");
       if (skippedExists > 0)
-        Log.LogMessage(MessageImportance.High, $"Unchanged:            {skippedExists}");
-      Log.LogMessage(MessageImportance.High, $"Output dir:           {OutputDirectory}");
+        Log.LogMessage(MessageImportance.High, $"Unchanged:                  {skippedExists}");
+      Log.LogMessage(MessageImportance.High, $"Output dir:                 {OutputDirectory}");
       Log.LogMessage(MessageImportance.High, "============================================================");
 
       return true;
@@ -657,5 +704,158 @@ public class SqlTriggerGenerator : MSTask
 
     return sb.ToString();
   }
-}
 
+  /// <summary>
+  /// Generates a reactivation cascade trigger for a parent table.
+  /// When the parent is reactivated (active 0->1), auto-reactivate children
+  /// that were soft-deleted at the same time (within 2 seconds based on valid_to).
+  /// </summary>
+  private string GenerateReactivationCascadeTrigger(
+    TableAnalysis parent,
+    Dictionary<string, TableAnalysis> tableLookup,
+    ColumnConfig columns)
+  {
+    string schema = parent.Schema ?? DefaultSchema;
+    string activeColumn = parent.ActiveColumnName ?? "active";
+    string validToColumn = parent.ValidToColumn ?? columns.ValidTo;
+    List<string> primaryKeyColumns = parent.PrimaryKeyColumns.Count > 0
+      ? parent.PrimaryKeyColumns
+      : new List<string> { "id" };
+
+    var sb = new StringBuilder();
+
+    // Header
+    sb.AppendLine($@"-- =================================================================================
+-- Reactivation Cascade Trigger for [{schema}].[{parent.Name}]
+-- Generated by: SchemaTools.SqlTriggerGenerator
+-- Generated on: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC
+--
+-- Purpose:
+--   When this parent record is reactivated (active: 0 -> 1), automatically
+--   reactivate child records that were soft-deleted at the same time.
+--   Uses timestamp matching (valid_to within 2 seconds) to identify children
+--   that were cascade-deleted together with this parent.
+--
+-- Cascades reactivation to {parent.ChildTables.Count} child table(s):");
+
+    foreach (string childName in parent.ChildTables)
+    {
+      sb.AppendLine($"--   - {childName}");
+    }
+
+    sb.AppendLine(@"--
+-- DO NOT EDIT MANUALLY - regenerate with Force=true
+-- =================================================================================
+");
+
+    sb.AppendLine($"CREATE TRIGGER [{schema}].[trg_{parent.Name}_cascade_reactivation]");
+    sb.AppendLine($"ON [{schema}].[{parent.Name}]");
+    sb.AppendLine("AFTER UPDATE");
+    sb.AppendLine("AS");
+    sb.AppendLine("BEGIN");
+    sb.AppendLine("    SET NOCOUNT ON;");
+    sb.AppendLine();
+    sb.AppendLine($"    -- Only proceed if '{activeColumn}' column was updated");
+    sb.AppendLine($"    IF NOT UPDATE({activeColumn})");
+    sb.AppendLine("        RETURN;");
+    sb.AppendLine();
+    sb.AppendLine("    -- Check if any rows were actually reactivated (active: 0 -> 1)");
+    sb.AppendLine("    IF NOT EXISTS (");
+    sb.AppendLine("        SELECT 1");
+    sb.AppendLine("        FROM inserted i");
+    sb.AppendLine($"        JOIN deleted d ON {BuildPkJoinCondition(primaryKeyColumns, "i", "d")}");
+    sb.AppendLine($"        WHERE i.{activeColumn} = {columns.ActiveValue} AND d.{activeColumn} = {columns.InactiveValue}");
+    sb.AppendLine("    )");
+    sb.AppendLine("        RETURN;");
+    sb.AppendLine();
+    sb.AppendLine("    -- Capture the user performing the reactivation for audit trail");
+    sb.AppendLine($"    DECLARE @updated_by {columns.UpdatedByType};");
+    sb.AppendLine($"    SELECT TOP 1 @updated_by = {columns.UpdatedBy} FROM inserted;");
+    sb.AppendLine();
+
+    // Generate cascade reactivation UPDATE for each child table
+    foreach (string childName in parent.ChildTables)
+    {
+      if (!tableLookup.TryGetValue(childName, out TableAnalysis? child))
+      {
+        sb.AppendLine($"    -- Skipping {childName}: Not found in analysis");
+        continue;
+      }
+
+      if (!child.HasSoftDelete)
+      {
+        sb.AppendLine($"    -- Skipping {childName}: Does not have soft-delete enabled");
+        continue;
+      }
+
+      // Find the FK from child to this parent
+      ForeignKeyRef? fkToParent = child.ForeignKeyReferences
+        .FirstOrDefault(fk => string.Equals(fk.ReferencedTable, parent.Name, StringComparison.OrdinalIgnoreCase));
+
+      if (fkToParent == null)
+      {
+        sb.AppendLine($"    -- Skipping {childName}: FK relationship not found");
+        continue;
+      }
+
+      string childSchema = child.Schema ?? DefaultSchema;
+      string childActiveColumn = child.ActiveColumnName ?? "active";
+      string childValidToColumn = child.ValidToColumn ?? columns.ValidTo;
+
+      // Get FK columns (supports composite FKs)
+      List<string> fkColumns = fkToParent.Columns.Count > 0
+        ? fkToParent.Columns
+        : new List<string> { "id" };
+      List<string> referencedColumns = fkToParent.ReferencedColumns.Count > 0
+        ? fkToParent.ReferencedColumns
+        : primaryKeyColumns;
+
+      sb.AppendLine($"    -- Cascade reactivation to [{childSchema}].[{childName}]");
+      sb.AppendLine($"    -- Only reactivate children whose valid_to is within 2 seconds of parent's valid_to");
+      sb.AppendLine($"    -- (i.e., children that were soft-deleted at the same time as this parent)");
+
+      if (fkColumns.Count == 1)
+      {
+        // Single-column FK: use EXISTS with correlated subquery
+        sb.AppendLine($"    UPDATE c");
+        sb.AppendLine("    SET");
+        sb.AppendLine($"        c.{childActiveColumn} = {columns.ActiveValue},");
+        sb.AppendLine($"        c.{columns.UpdatedBy} = @updated_by");
+        sb.AppendLine($"    FROM [{childSchema}].[{childName}] c");
+        sb.AppendLine("    WHERE EXISTS (");
+        sb.AppendLine("        SELECT 1");
+        sb.AppendLine("        FROM inserted i");
+        sb.AppendLine($"        JOIN deleted d ON {BuildPkJoinCondition(primaryKeyColumns, "i", "d")}");
+        sb.AppendLine($"        WHERE i.{activeColumn} = {columns.ActiveValue} AND d.{activeColumn} = {columns.InactiveValue}");
+        sb.AppendLine($"        AND c.{fkColumns[0]} = i.{referencedColumns[0]}");
+        sb.AppendLine($"        AND ABS(DATEDIFF(SECOND, c.{childValidToColumn}, d.{validToColumn})) <= 2");
+        sb.AppendLine("    )");
+        sb.AppendLine($"    AND c.{childActiveColumn} = {columns.InactiveValue};  -- Only reactivate inactive children");
+      }
+      else
+      {
+        // Multi-column FK: use EXISTS with correlated subquery
+        sb.AppendLine($"    UPDATE c");
+        sb.AppendLine("    SET");
+        sb.AppendLine($"        c.{childActiveColumn} = {columns.ActiveValue},");
+        sb.AppendLine($"        c.{columns.UpdatedBy} = @updated_by");
+        sb.AppendLine($"    FROM [{childSchema}].[{childName}] c");
+        sb.AppendLine("    WHERE EXISTS (");
+        sb.AppendLine("        SELECT 1");
+        sb.AppendLine("        FROM inserted i");
+        sb.AppendLine($"        JOIN deleted d ON {BuildPkJoinCondition(primaryKeyColumns, "i", "d")}");
+        sb.AppendLine($"        WHERE i.{activeColumn} = {columns.ActiveValue} AND d.{activeColumn} = {columns.InactiveValue}");
+        sb.AppendLine($"        AND {BuildFkJoinCondition(fkColumns, referencedColumns, "c", "i")}");
+        sb.AppendLine($"        AND ABS(DATEDIFF(SECOND, c.{childValidToColumn}, d.{validToColumn})) <= 2");
+        sb.AppendLine("    )");
+        sb.AppendLine($"    AND c.{childActiveColumn} = {columns.InactiveValue};  -- Only reactivate inactive children");
+      }
+      sb.AppendLine();
+    }
+
+    sb.AppendLine("END;");
+    sb.AppendLine("GO");
+
+    return sb.ToString();
+  }
+}

@@ -39,6 +39,12 @@ public class SchemaSourceAnalyser : MSTask
   public string GeneratedTriggersDirectory { get; set; } = string.Empty;
 
   /// <summary>
+  /// Directory where generated views are placed. Files in this directory
+  /// are considered "owned" by SchemaTools and can be regenerated.
+  /// </summary>
+  public string GeneratedViewsDirectory { get; set; } = string.Empty;
+
+  /// <summary>
   /// Configuration file path
   /// </summary>
   public string ConfigFile { get; set; } = string.Empty;
@@ -80,6 +86,7 @@ public class SchemaSourceAnalyser : MSTask
         SqlServerVersion = _config.SqlServerVersion,
         DefaultSchema = _config.DefaultSchema,
         GeneratedTriggersDirectory = GeneratedTriggersDirectory,
+        GeneratedViewsDirectory = GeneratedViewsDirectory,
         Columns = new ColumnConfig
         {
           Active = _config.Columns.Active,
@@ -112,6 +119,9 @@ public class SchemaSourceAnalyser : MSTask
 
           // Also discover existing triggers in this file
           DiscoverExistingTriggers(sqlFile, parser, analysis);
+
+          // Also discover existing views in this file
+          DiscoverExistingViews(sqlFile, parser, analysis);
         }
         catch (Exception ex)
         {
@@ -151,6 +161,11 @@ public class SchemaSourceAnalyser : MSTask
       if (explicitTriggers > 0)
       {
         Log.LogMessage(MessageImportance.High, $"  Explicit triggers: {explicitTriggers}");
+      }
+      int explicitViews = analysis.ExistingViews.Count(v => !v.IsGenerated);
+      if (explicitViews > 0)
+      {
+        Log.LogMessage(MessageImportance.High, $"  Explicit views: {explicitViews}");
       }
       Log.LogMessage(MessageImportance.High, $"  Output: {AnalysisOutput}");
 
@@ -286,6 +301,7 @@ public class SchemaSourceAnalyser : MSTask
       analysis.HasSoftDelete = true;
       analysis.ActiveColumnName = activeColumnName;
       analysis.SoftDeleteMode = effective.Features.SoftDeleteMode;
+      analysis.ReactivationCascade = effective.Features.ReactivationCascade;
     }
 
     // Extract primary key
@@ -377,6 +393,47 @@ public class SchemaSourceAnalyser : MSTask
     }
   }
 
+  private void DiscoverExistingViews(string filePath, TSqlParser parser, SourceAnalysisResult analysis)
+  {
+    string sqlText = File.ReadAllText(filePath);
+    using var reader = new StringReader(sqlText);
+    TSqlFragment fragment = parser.Parse(reader, out _);
+
+    var visitor = new ViewDiscoveryVisitor();
+    fragment.Accept(visitor);
+
+    if (visitor.Views.Count == 0)
+    {
+      return;
+    }
+
+    // Determine if this file is in the generated directory
+    string normalisedPath = Path.GetFullPath(filePath).TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant();
+    string normalisedGenDir = string.IsNullOrEmpty(GeneratedViewsDirectory)
+      ? string.Empty
+      : Path.GetFullPath(GeneratedViewsDirectory).TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant();
+
+    bool isInGeneratedDir = !string.IsNullOrEmpty(normalisedGenDir) &&
+                            normalisedPath.StartsWith(normalisedGenDir, StringComparison.OrdinalIgnoreCase);
+
+    foreach (DiscoveredView view in visitor.Views)
+    {
+      analysis.ExistingViews.Add(new ExistingView
+      {
+        Name = view.Name,
+        Schema = view.Schema ?? _config.DefaultSchema,
+        SourceFile = filePath,
+        IsGenerated = isInGeneratedDir
+      });
+
+      if (!isInGeneratedDir)
+      {
+        Log.LogMessage(MessageImportance.Low,
+          $"  Discovered explicit view: [{view.Schema ?? _config.DefaultSchema}].[{view.Name}] in {Path.GetFileName(filePath)}");
+      }
+    }
+  }
+
   private static void BuildForeignKeyGraph(SourceAnalysisResult analysis)
   {
     // Build lookup for quick access
@@ -444,9 +501,19 @@ public class SourceAnalysisResult
   public List<ExistingTrigger> ExistingTriggers { get; set; } = new();
 
   /// <summary>
+  /// Existing views discovered in the project (for explicit-wins policy)
+  /// </summary>
+  public List<ExistingView> ExistingViews { get; set; } = new();
+
+  /// <summary>
   /// The generated triggers directory path (used to distinguish explicit vs generated)
   /// </summary>
   public string GeneratedTriggersDirectory { get; set; } = string.Empty;
+
+  /// <summary>
+  /// The generated views directory path (used to distinguish explicit vs generated)
+  /// </summary>
+  public string GeneratedViewsDirectory { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -488,6 +555,21 @@ public class ExistingTrigger
 }
 
 /// <summary>
+/// Represents an existing view discovered during source analysis
+/// </summary>
+public class ExistingView
+{
+  public string Name { get; set; } = string.Empty;
+  public string Schema { get; set; } = SchemaToolsDefaults.DefaultSchema;
+  public string SourceFile { get; set; } = string.Empty;
+
+  /// <summary>
+  /// True if this view is in the _generated directory (owned by SchemaTools)
+  /// </summary>
+  public bool IsGenerated { get; set; }
+}
+
+/// <summary>
 /// Analysis result for a single table - focused on code generation needs
 /// </summary>
 public class TableAnalysis
@@ -523,6 +605,13 @@ public class TableAnalysis
   /// Determines whether cascade, restrict, or ignore behaviour is used.
   /// </summary>
   public SoftDeleteMode SoftDeleteMode { get; set; } = SoftDeleteMode.Cascade;
+
+  /// <summary>
+  /// Whether reactivation cascade is enabled for this table.
+  /// When true, reactivating this parent will auto-reactivate children
+  /// that were soft-deleted at the same time.
+  /// </summary>
+  public bool ReactivationCascade { get; set; } = false;
 
   // Code generation flags
   public bool GenerateTrigger { get; set; }
