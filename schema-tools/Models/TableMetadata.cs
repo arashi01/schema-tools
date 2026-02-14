@@ -11,7 +11,7 @@ public class TableMetadata
   public string Name { get; set; } = string.Empty;
 
   [JsonPropertyName("schema")]
-  public string Schema { get; set; } = "dbo";
+  public string Schema { get; set; } = SchemaToolsDefaults.DefaultSchema;
 
   [JsonPropertyName("category")]
   public string? Category { get; set; }

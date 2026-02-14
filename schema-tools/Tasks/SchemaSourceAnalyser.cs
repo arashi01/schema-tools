@@ -44,8 +44,8 @@ public class SchemaSourceAnalyser : MSTask
   public string ConfigFile { get; set; } = string.Empty;
 
   // Fallback defaults (used when config file not provided)
-  public string SqlServerVersion { get; set; } = "Sql160";
-  public string DefaultSchema { get; set; } = "dbo";
+  public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
+  public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
 
   // Testing support
   internal SchemaToolsConfig? TestConfig { get; set; }
@@ -224,7 +224,8 @@ public class SchemaSourceAnalyser : MSTask
       "Sql140" => new TSql140Parser(initialQuotedIdentifiers: true),
       "Sql150" => new TSql150Parser(initialQuotedIdentifiers: true),
       "Sql160" => new TSql160Parser(initialQuotedIdentifiers: true),
-      _ => new TSql160Parser(initialQuotedIdentifiers: true)
+      "Sql170" => new TSql170Parser(initialQuotedIdentifiers: true),
+      _ => new TSql170Parser(initialQuotedIdentifiers: true)
     };
   }
 
@@ -421,10 +422,10 @@ public class SchemaSourceAnalyser : MSTask
 /// </summary>
 public class SourceAnalysisResult
 {
-  public string Version { get; set; } = "1.0.0";
+  public string Version { get; set; } = SchemaToolsDefaults.MetadataVersion;
   public DateTime AnalysedAt { get; set; }
-  public string SqlServerVersion { get; set; } = "Sql160";
-  public string DefaultSchema { get; set; } = "dbo";
+  public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
+  public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
   public List<TableAnalysis> Tables { get; set; } = new();
 
   /// <summary>
@@ -453,13 +454,13 @@ public class SourceAnalysisResult
 /// </summary>
 public class ColumnConfig
 {
-  public string Active { get; set; } = "active";
-  public string ActiveValue { get; set; } = "1";
-  public string InactiveValue { get; set; } = "0";
-  public string UpdatedBy { get; set; } = "updated_by";
-  public string UpdatedByType { get; set; } = "UNIQUEIDENTIFIER";
-  public string ValidFrom { get; set; } = "valid_from";
-  public string ValidTo { get; set; } = "valid_to";
+  public string Active { get; set; } = SchemaToolsDefaults.ActiveColumn;
+  public string ActiveValue { get; set; } = SchemaToolsDefaults.ActiveValue;
+  public string InactiveValue { get; set; } = SchemaToolsDefaults.InactiveValue;
+  public string UpdatedBy { get; set; } = SchemaToolsDefaults.UpdatedByColumn;
+  public string UpdatedByType { get; set; } = SchemaToolsDefaults.UpdatedByType;
+  public string ValidFrom { get; set; } = SchemaToolsDefaults.ValidFromColumn;
+  public string ValidTo { get; set; } = SchemaToolsDefaults.ValidToColumn;
 }
 
 /// <summary>
@@ -476,7 +477,7 @@ public class FeatureFlags
 public class ExistingTrigger
 {
   public string Name { get; set; } = string.Empty;
-  public string Schema { get; set; } = "dbo";
+  public string Schema { get; set; } = SchemaToolsDefaults.DefaultSchema;
   public string TargetTable { get; set; } = string.Empty;
   public string SourceFile { get; set; } = string.Empty;
 
@@ -492,7 +493,7 @@ public class ExistingTrigger
 public class TableAnalysis
 {
   public string Name { get; set; } = string.Empty;
-  public string Schema { get; set; } = "dbo";
+  public string Schema { get; set; } = SchemaToolsDefaults.DefaultSchema;
   public string? Category { get; set; }
   public string SourceFile { get; set; } = string.Empty;
 
@@ -542,8 +543,8 @@ public class TableAnalysis
 public class ForeignKeyRef
 {
   public string ReferencedTable { get; set; } = string.Empty;
-  public string ReferencedSchema { get; set; } = "dbo";
+  public string ReferencedSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
   public List<string> Columns { get; set; } = new();
   public List<string> ReferencedColumns { get; set; } = new();
-  public string OnDelete { get; set; } = "NoAction";
+  public string OnDelete { get; set; } = SchemaToolsDefaults.ForeignKeyOnDeleteDefault;
 }

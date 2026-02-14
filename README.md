@@ -107,7 +107,7 @@ Create `schema-tools.json` in the project root. Contains schema semantics only (
 {
   "database": "MyDatabase",
   "defaultSchema": "dbo",
-  "sqlServerVersion": "Sql160",
+  "sqlServerVersion": "Sql170",
 
   "features": {
     "enableSoftDelete": true,
@@ -695,7 +695,7 @@ Post-build, `Build/schema-metadata.json` is extracted from the compiled `.dacpac
   "generatedBy": "SchemaMetadataExtractor (DacFx)",
   "database": "MyDatabase",
   "defaultSchema": "dbo",
-  "sqlServerVersion": "Sql160",
+  "sqlServerVersion": "Sql170",
   "tables": [
     {
       "name": "users",
@@ -732,7 +732,8 @@ This metadata is authoritative - it reflects the actual compiled schema includin
 | SQL Server 2016 | `Sql130`           |
 | SQL Server 2017 | `Sql140`           |
 | SQL Server 2019 | `Sql150`           |
-| SQL Server 2022 | `Sql160` (default) |
+| SQL Server 2022 | `Sql160`           |
+| SQL Server 2025 | `Sql170` (default) |
 
 ## Roadmap
 
@@ -769,3 +770,4 @@ MIT
 ## Contributing
 
 Issues and pull requests welcome at: https://github.com/arashi01/schema-tools
+
