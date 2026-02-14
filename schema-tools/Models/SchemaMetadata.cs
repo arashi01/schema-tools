@@ -55,9 +55,6 @@ public class SchemaStatistics
   [JsonPropertyName("polymorphicTables")]
   public int PolymorphicTables { get; set; }
 
-  [JsonPropertyName("triggersToGenerate")]
-  public int TriggersToGenerate { get; set; }
-
   [JsonPropertyName("totalColumns")]
   public int TotalColumns { get; set; }
 

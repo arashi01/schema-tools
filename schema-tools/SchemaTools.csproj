@@ -43,13 +43,16 @@
     <!-- SQL Server ScriptDom for parsing T-SQL -->
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0" />
 
+    <!-- DacFx for semantic model extraction from .dacpac (post-build) -->
+    <PackageReference Include="Microsoft.SqlServer.DacFx" Version="170.3.93" />
+
     <!-- Source link for debugging -->
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
   </ItemGroup>
 
   <!-- System.Text.Json is in-box for net10.0 but must be referenced for netstandard2.0 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="System.Text.Json" Version="9.0.3" />
+    <PackageReference Include="System.Text.Json" Version="9.0.5" />
   </ItemGroup>
 
   <ItemGroup>

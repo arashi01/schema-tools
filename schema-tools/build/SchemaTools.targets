@@ -1,36 +1,77 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       SCHEMA TOOLS CONFIGURATION
+       
+       Output Strategy:
+         Source      - Generated files placed in project directory (committed to source control)
+         Intermediate - Generated files placed in obj/IntermediateOutputPath (transient, not committed)
+       
+       All paths can be explicitly overridden regardless of strategy.
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+
   <PropertyGroup>
-    <!-- Default configuration file name -->
+    <!-- Master enable -->
+    <SchemaToolsEnabled Condition="'$(SchemaToolsEnabled)' == ''">true</SchemaToolsEnabled>
+
+    <!-- Output strategy: Source (committed) vs Intermediate (transient) -->
+    <SchemaToolsOutputStrategy Condition="'$(SchemaToolsOutputStrategy)' == ''">Source</SchemaToolsOutputStrategy>
+
+    <!-- Feature toggles -->
+    <SchemaToolsGenerateTriggers Condition="'$(SchemaToolsGenerateTriggers)' == ''">true</SchemaToolsGenerateTriggers>
+    <SchemaToolsGenerateProcedures Condition="'$(SchemaToolsGenerateProcedures)' == ''">true</SchemaToolsGenerateProcedures>
+    <SchemaToolsValidate Condition="'$(SchemaToolsValidate)' == ''">true</SchemaToolsValidate>
+    <SchemaToolsGenerateDocs Condition="'$(SchemaToolsGenerateDocs)' == ''">true</SchemaToolsGenerateDocs>
+    <SchemaToolsExtractPostBuildMetadata Condition="'$(SchemaToolsExtractPostBuildMetadata)' == ''">true</SchemaToolsExtractPostBuildMetadata>
+
+    <!-- Configuration file (schema semantics only) -->
     <SchemaToolsConfig Condition="'$(SchemaToolsConfig)' == ''">$(MSBuildProjectDirectory)\schema-tools.json</SchemaToolsConfig>
 
-    <!-- Default input location -->
-    <SchemaToolsTablesDirectory Condition="'$(SchemaToolsTablesDirectory)' == ''">$(MSBuildProjectDirectory)\Schema\Tables</SchemaToolsTablesDirectory>
-
-    <!-- Default output locations -->
-    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(MSBuildProjectDirectory)\Build\schema-metadata.json</SchemaToolsMetadataOutput>
-    <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(MSBuildProjectDirectory)\Docs\SCHEMA.md</SchemaToolsDocsOutput>
-    <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Triggers\_generated</SchemaToolsTriggersOutput>
-
-    <!-- Feature flags (can be overridden per project) -->
-    <SchemaToolsEnabled Condition="'$(SchemaToolsEnabled)' == ''">true</SchemaToolsEnabled>
-    <SchemaToolsGenerateMetadata Condition="'$(SchemaToolsGenerateMetadata)' == ''">true</SchemaToolsGenerateMetadata>
-    <SchemaToolsValidate Condition="'$(SchemaToolsValidate)' == ''">true</SchemaToolsValidate>
-    <SchemaToolsGenerateTriggers Condition="'$(SchemaToolsGenerateTriggers)' == ''">true</SchemaToolsGenerateTriggers>
-    <SchemaToolsGenerateDocs Condition="'$(SchemaToolsGenerateDocs)' == ''">true</SchemaToolsGenerateDocs>
-
-    <!-- Select the correct TFM based on the MSBuild runtime environment.
-         Full MSBuild (Visual Studio) runs on .NET Framework; dotnet build runs on .NET Core. -->
+    <!-- Select the correct TFM based on the MSBuild runtime environment -->
     <SchemaTools_TFM Condition="'$(MSBuildRuntimeType)' != 'Core'">netstandard2.0</SchemaTools_TFM>
     <SchemaTools_TFM Condition="'$(MSBuildRuntimeType)' == 'Core'">net10.0</SchemaTools_TFM>
   </PropertyGroup>
 
-  <!-- Import task definitions using the runtime-appropriate assembly -->
-  <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataGenerator"
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       OUTPUT PATH DEFAULTS (by strategy)
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- Strategy: Source - paths in project directory (committed to source control) -->
+  <PropertyGroup Condition="'$(SchemaToolsOutputStrategy)' == 'Source'">
+    <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Triggers\_generated</SchemaToolsTriggersOutput>
+    <SchemaToolsProceduresOutput Condition="'$(SchemaToolsProceduresOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Procedures\_generated</SchemaToolsProceduresOutput>
+    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(MSBuildProjectDirectory)\Build\schema-metadata.json</SchemaToolsMetadataOutput>
+    <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(MSBuildProjectDirectory)\Docs\SCHEMA.md</SchemaToolsDocsOutput>
+  </PropertyGroup>
+
+  <!-- Strategy: Intermediate - paths in obj/bin directories (transient, not committed) -->
+  <PropertyGroup Condition="'$(SchemaToolsOutputStrategy)' == 'Intermediate'">
+    <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(IntermediateOutputPath)SchemaTools\Triggers</SchemaToolsTriggersOutput>
+    <SchemaToolsProceduresOutput Condition="'$(SchemaToolsProceduresOutput)' == ''">$(IntermediateOutputPath)SchemaTools\Procedures</SchemaToolsProceduresOutput>
+    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(IntermediateOutputPath)schema-metadata.json</SchemaToolsMetadataOutput>
+    <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(OutputPath)SCHEMA.md</SchemaToolsDocsOutput>
+  </PropertyGroup>
+
+  <!-- Analysis output always goes to intermediate (never committed) -->
+  <PropertyGroup>
+    <SchemaToolsAnalysisOutput Condition="'$(SchemaToolsAnalysisOutput)' == ''">$(IntermediateOutputPath)schema-analysis.json</SchemaToolsAnalysisOutput>
+  </PropertyGroup>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       TASK DEFINITIONS
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+
+  <UsingTask TaskName="SchemaTools.Tasks.SchemaSourceAnalyser"
              AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SqlTriggerGenerator"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+
+  <UsingTask TaskName="SchemaTools.Tasks.SqlProcedureGenerator"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+
+  <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataExtractor"
              AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaValidator"
@@ -39,20 +80,84 @@
   <UsingTask TaskName="SchemaTools.Tasks.MarkdownDocumentationGenerator"
              AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
 
-  <!-- Build targets -->
-  <Target Name="SchemaToolsGenerateMetadata"
+  <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataGenerator"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       PRE-BUILD TARGETS
+       These run before SqlBuild to generate triggers and procedures that will be
+       included in the .dacpac
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- Phase 1: Analyse source files to build FK graph and detect patterns -->
+  <Target Name="SchemaToolsAnalyse"
           BeforeTargets="BeforeBuild"
-          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsGenerateMetadata)' == 'true'">
-    <Message Text="SchemaTools: Generating metadata..." Importance="high" />
-    <SchemaTools.Tasks.SchemaMetadataGenerator
-      TablesDirectory="$(SchemaToolsTablesDirectory)"
-      TableFiles="@(SchemaToolsTableFile)"
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND ('$(SchemaToolsGenerateTriggers)' == 'true' OR '$(SchemaToolsGenerateProcedures)' == 'true')">
+    <Message Text="SchemaTools: Analysing source files..." Importance="high" />
+    <SchemaTools.Tasks.SchemaSourceAnalyser
+      SqlFiles="@(Build)"
+      AnalysisOutput="$(SchemaToolsAnalysisOutput)"
+      GeneratedTriggersDirectory="$(SchemaToolsTriggersOutput)"
+      ConfigFile="$(SchemaToolsConfig)" />
+  </Target>
+
+  <!-- Phase 2: Generate cascade soft-delete triggers for parent tables -->
+  <!-- Explicit definitions anywhere in @(Build) take precedence (explicit-wins policy) -->
+  <Target Name="SchemaToolsGenerateTriggers"
+          AfterTargets="SchemaToolsAnalyse"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsGenerateTriggers)' == 'true'">
+    <Message Text="SchemaTools: Generating cascade soft-delete triggers..." Importance="high" />
+    <SchemaTools.Tasks.SqlTriggerGenerator
+      AnalysisFile="$(SchemaToolsAnalysisOutput)"
+      OutputDirectory="$(SchemaToolsTriggersOutput)"
+      Force="false" />
+  </Target>
+
+  <!-- Phase 3: Generate purge stored procedure -->
+  <Target Name="SchemaToolsGenerateProcedures"
+          AfterTargets="SchemaToolsGenerateTriggers"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsGenerateProcedures)' == 'true'">
+    <Message Text="SchemaTools: Generating purge procedures..." Importance="high" />
+    <SchemaTools.Tasks.SqlProcedureGenerator
+      AnalysisFile="$(SchemaToolsAnalysisOutput)"
+      OutputDirectory="$(SchemaToolsProceduresOutput)"
+      Force="false" />
+  </Target>
+
+  <!-- Phase 4: Include generated files in the build -->
+  <Target Name="SchemaToolsIncludeGenerated"
+          AfterTargets="SchemaToolsGenerateProcedures"
+          BeforeTargets="BeforeBuild"
+          Condition="'$(SchemaToolsEnabled)' == 'true'">
+    <ItemGroup>
+      <Build Include="$(SchemaToolsTriggersOutput)\**\*.sql"
+             Condition="Exists('$(SchemaToolsTriggersOutput)')" />
+      <Build Include="$(SchemaToolsProceduresOutput)\**\*.sql"
+             Condition="Exists('$(SchemaToolsProceduresOutput)')" />
+    </ItemGroup>
+  </Target>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       POST-BUILD TARGETS
+       These run after SqlBuild to validate and document the compiled .dacpac
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- Phase 5: Extract authoritative metadata from compiled .dacpac -->
+  <Target Name="SchemaToolsExtractMetadata"
+          AfterTargets="Build"
+          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsExtractPostBuildMetadata)' == 'true'">
+    <Message Text="SchemaTools: Extracting metadata from dacpac..." Importance="high" />
+    <SchemaTools.Tasks.SchemaMetadataExtractor
+      DacpacPath="$(TargetPath)"
       OutputFile="$(SchemaToolsMetadataOutput)"
       ConfigFile="$(SchemaToolsConfig)" />
   </Target>
 
+  <!-- Phase 6: Validate compiled schema -->
   <Target Name="SchemaToolsValidate"
-          AfterTargets="SchemaToolsGenerateMetadata"
+          AfterTargets="SchemaToolsExtractMetadata"
           Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsValidate)' == 'true'">
     <Message Text="SchemaTools: Validating schema..." Importance="high" />
     <SchemaTools.Tasks.SchemaValidator
@@ -60,19 +165,9 @@
       ConfigFile="$(SchemaToolsConfig)" />
   </Target>
 
-  <Target Name="SchemaToolsGenerateTriggers"
-          AfterTargets="SchemaToolsValidate"
-          Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsGenerateTriggers)' == 'true'">
-    <Message Text="SchemaTools: Generating triggers..." Importance="high" />
-    <SchemaTools.Tasks.SqlTriggerGenerator
-      MetadataFile="$(SchemaToolsMetadataOutput)"
-      OutputDirectory="$(SchemaToolsTriggersOutput)"
-      CustomTriggersDirectory="$(MSBuildProjectDirectory)\Schema\Triggers\_custom"
-      Force="false" />
-  </Target>
-
+  <!-- Phase 7: Generate documentation from final schema -->
   <Target Name="SchemaToolsGenerateDocs"
-          AfterTargets="SchemaToolsGenerateTriggers"
+          AfterTargets="SchemaToolsValidate"
           Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsGenerateDocs)' == 'true'">
     <Message Text="SchemaTools: Generating documentation..." Importance="high" />
     <SchemaTools.Tasks.MarkdownDocumentationGenerator

@@ -6,7 +6,6 @@
   "features": {
     "enableSoftDelete": true,
     "enableTemporalVersioning": true,
-    "generateHardDeleteTriggers": true,
     "detectPolymorphicPatterns": true,
     "detectAppendOnlyTables": true
   },

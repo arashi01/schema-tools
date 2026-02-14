@@ -35,11 +35,11 @@ public class MarkdownDocumentationGenerator : MSTask
     try
     {
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
-          "════════════════════════════════════════════════════════");
+          "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
           "  Documentation Generator");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
-          "════════════════════════════════════════════════════════");
+          "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, string.Empty);
 
       // Load configuration
@@ -92,7 +92,7 @@ public class MarkdownDocumentationGenerator : MSTask
 
       File.WriteAllText(OutputFile, markdown.ToString(), Encoding.UTF8);
 
-      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"✓ Documentation written to: {OutputFile}");
+      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"+ Documentation written to: {OutputFile}");
       return true;
     }
     catch (Exception ex)
@@ -193,7 +193,6 @@ public class MarkdownDocumentationGenerator : MSTask
     markdown.AppendLine($"| Soft Delete Tables | {metadata.Statistics.SoftDeleteTables} |");
     markdown.AppendLine($"| Append-Only Tables | {metadata.Statistics.AppendOnlyTables} |");
     markdown.AppendLine($"| Polymorphic Tables | {metadata.Statistics.PolymorphicTables} |");
-    markdown.AppendLine($"| Auto-Generated Triggers | {metadata.Statistics.TriggersToGenerate} |");
     markdown.AppendLine($"| Total Columns | {metadata.Statistics.TotalColumns} |");
     markdown.AppendLine($"| Total Constraints | {metadata.Statistics.TotalConstraints} |");
     markdown.AppendLine();
@@ -293,13 +292,13 @@ public class MarkdownDocumentationGenerator : MSTask
     // Table properties
     var properties = new List<string>();
     if (table.HasTemporalVersioning)
-      properties.Add("🕐 Temporal");
+      properties.Add("[Temporal]");
     if (table.HasSoftDelete)
-      properties.Add("🗑️ Soft Delete");
+      properties.Add("[Soft Delete]");
     if (table.IsAppendOnly)
-      properties.Add("📝 Append-Only");
+      properties.Add("[Append-Only]");
     if (table.IsPolymorphic)
-      properties.Add("🔄 Polymorphic");
+      properties.Add("[Polymorphic]");
 
     if (properties.Count > 0)
     {
@@ -331,7 +330,7 @@ public class MarkdownDocumentationGenerator : MSTask
       if (col.IsComputed)
         constraints.Add("COMPUTED");
       if (col.ForeignKey != null)
-        constraints.Add($"FK→{col.ForeignKey.Table}");
+        constraints.Add($"FK->{col.ForeignKey.Table}");
       if (!string.IsNullOrEmpty(col.DefaultValue))
         constraints.Add($"DEFAULT {col.DefaultValue}");
 
@@ -339,7 +338,7 @@ public class MarkdownDocumentationGenerator : MSTask
       string description = col.Description ?? "";
 
       markdown.AppendLine(
-          $"| `{col.Name}` | {col.Type} | {(col.Nullable ? "✓" : "")} | {constraintStr} | {description} |");
+          $"| `{col.Name}` | {col.Type} | {(col.Nullable ? "+" : "")} | {constraintStr} | {description} |");
     }
 
     markdown.AppendLine();
@@ -380,7 +379,7 @@ public class MarkdownDocumentationGenerator : MSTask
       {
         string columns = string.Join(", ", fk.Columns);
         string refColumns = string.Join(", ", fk.ReferencedColumns);
-        markdown.AppendLine($"- `{fk.Name}`: ({columns}) → {fk.ReferencedTable}({refColumns})");
+        markdown.AppendLine($"- `{fk.Name}`: ({columns}) -> {fk.ReferencedTable}({refColumns})");
       }
       markdown.AppendLine();
     }

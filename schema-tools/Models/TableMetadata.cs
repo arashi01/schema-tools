@@ -28,6 +28,13 @@ public class TableMetadata
   [JsonPropertyName("hasSoftDelete")]
   public bool HasSoftDelete { get; set; }
 
+  /// <summary>
+  /// The name of the active column for soft-delete tables (e.g., "active", "is_enabled").
+  /// Only populated when HasActiveColumn is true.
+  /// </summary>
+  [JsonPropertyName("activeColumnName")]
+  public string? ActiveColumnName { get; set; }
+
   [JsonPropertyName("isAppendOnly")]
   public bool IsAppendOnly { get; set; }
 
@@ -88,26 +95,8 @@ public class ConstraintsCollection
 
 public class TriggerConfiguration
 {
-  [JsonPropertyName("hardDelete")]
-  public HardDeleteTrigger HardDelete { get; set; } = new();
-
   [JsonPropertyName("custom")]
   public List<CustomTrigger> Custom { get; set; } = new();
-}
-
-public class HardDeleteTrigger
-{
-  [JsonPropertyName("generate")]
-  public bool Generate { get; set; }
-
-  [JsonPropertyName("name")]
-  public string? Name { get; set; }
-
-  [JsonPropertyName("activeColumnName")]
-  public string ActiveColumnName { get; set; } = "active";
-
-  [JsonPropertyName("reason")]
-  public string? Reason { get; set; }
 }
 
 public class CustomTrigger
