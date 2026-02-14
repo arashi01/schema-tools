@@ -68,7 +68,7 @@ public class SchemaValidatorTests
     return (result, task);
   }
 
-  // ─── FK validation ──────────────────────────────────────────────
+  // --- FK validation -------------------------------------------------------
 
   [Fact]
   public void Validate_ForeignKeyToExistingTable_Passes()
@@ -150,7 +150,7 @@ public class SchemaValidatorTests
     task.ValidationErrors.Should().ContainMatch("*mismatched column counts*");
   }
 
-  // ─── Circular FK detection ──────────────────────────────────────
+  // --- Circular FK detection -----------------------------------------------
 
   [Fact]
   public void Validate_CircularForeignKeys_ReportsError()
@@ -184,7 +184,7 @@ public class SchemaValidatorTests
     task.ValidationErrors.Should().ContainMatch("*Circular foreign key*");
   }
 
-  // ─── Polymorphic validation ─────────────────────────────────────
+  // --- Polymorphic validation ----------------------------------------------
 
   [Fact]
   public void Validate_PolymorphicWithCheckConstraint_Passes()
@@ -258,7 +258,7 @@ public class SchemaValidatorTests
     task.ValidationWarnings.Should().ContainMatch("*no allowed types*");
   }
 
-  // ─── Temporal validation ────────────────────────────────────────
+  // --- Temporal validation -------------------------------------------------
 
   [Fact]
   public void Validate_TemporalTableWithCorrectStructure_Passes()
@@ -361,7 +361,7 @@ public class SchemaValidatorTests
     task.ValidationWarnings.Should().ContainMatch("*missing history table*");
   }
 
-  // ─── Audit column validation ────────────────────────────────────
+  // --- Audit column validation ---------------------------------------------
 
   [Fact]
   public void Validate_MissingAuditColumns_ReportsError()
@@ -394,7 +394,7 @@ public class SchemaValidatorTests
     TableMetadata table = CreateTable("logs", t =>
     {
       t.IsAppendOnly = true;
-      // Remove updated_by — append-only shouldn't have it
+      // Remove updated_by -- append-only shouldn't have it
       t.Columns.RemoveAll(c => c.Name == "updated_by");
     });
 
@@ -417,7 +417,7 @@ public class SchemaValidatorTests
     task.ValidationWarnings.Should().ContainMatch("*should not have 'updated_by'*");
   }
 
-  // ─── Naming convention validation ───────────────────────────────
+  // --- Naming convention validation ----------------------------------------
 
   [Fact]
   public void Validate_SnakeCaseNames_Passes()
@@ -434,7 +434,7 @@ public class SchemaValidatorTests
     TableMetadata table = CreateTable("UserAccounts");
 
     (bool _, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    // Naming is a warning, not an error — validation still passes
+    // Naming is a warning, not an error -- validation still passes
     task.ValidationWarnings.Should().ContainMatch("*snake_case*");
   }
 
@@ -474,7 +474,7 @@ public class SchemaValidatorTests
     task.ValidationWarnings.Should().ContainMatch("*should start with 'fk_child_'*");
   }
 
-  // ─── Primary key validation ─────────────────────────────────────
+  // --- Primary key validation ----------------------------------------------
 
   [Fact]
   public void Validate_MissingPrimaryKey_ReportsError()
@@ -497,7 +497,7 @@ public class SchemaValidatorTests
     task.ValidationErrors.Should().ContainMatch("*no primary key*");
   }
 
-  // ─── Soft delete consistency ────────────────────────────────────
+  // --- Soft delete consistency ---------------------------------------------
 
   [Fact]
   public void Validate_SoftDeleteWithoutTemporal_ReportsError()
@@ -507,10 +507,7 @@ public class SchemaValidatorTests
       t.HasSoftDelete = true;
       t.HasActiveColumn = true;
       t.HasTemporalVersioning = false;
-      t.Triggers = new TriggerConfiguration
-      {
-        HardDelete = new HardDeleteTrigger { Generate = true, Name = "trg_bad_soft_hard_delete" }
-      };
+      t.ActiveColumnName = "active";
     });
 
     (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
@@ -518,7 +515,7 @@ public class SchemaValidatorTests
     task.ValidationErrors.Should().ContainMatch("*HasTemporalVersioning is false*");
   }
 
-  // ─── TreatWarningsAsErrors ──────────────────────────────────────
+  // --- TreatWarningsAsErrors -----------------------------------------------
 
   [Fact]
   public void Validate_TreatWarningsAsErrors_FailsOnWarning()
@@ -532,7 +529,7 @@ public class SchemaValidatorTests
     success.Should().BeFalse("warnings should be treated as errors");
   }
 
-  // ─── Disabling individual validations ───────────────────────────
+  // --- Disabling individual validations ------------------------------------
 
   [Fact]
   public void Validate_DisabledNamingConventions_IgnoresStyleIssues()
@@ -566,7 +563,7 @@ public class SchemaValidatorTests
     success.Should().BeTrue();
   }
 
-  // ─── Configurable column names ──────────────────────────────────
+  // --- Configurable column names -------------------------------------------
 
   [Fact]
   public void Validate_CustomTemporalColumns_ValidatesCorrectNames()
@@ -662,15 +659,7 @@ public class SchemaValidatorTests
       t.HasActiveColumn = true;
       t.HasTemporalVersioning = true;
       t.HistoryTable = "[test].[soft_del_history]";
-      t.Triggers = new TriggerConfiguration
-      {
-        HardDelete = new HardDeleteTrigger
-        {
-          Generate = true,
-          Name = "trg_soft_del_hard_delete",
-          ActiveColumnName = "is_enabled"
-        }
-      };
+      t.ActiveColumnName = "is_enabled";
       t.Columns.Add(new ColumnMetadata { Name = "is_enabled", Type = "BIT", DefaultValue = "1" });
       t.Columns.Add(new ColumnMetadata { Name = "valid_from", Type = "DATETIME2", IsGeneratedAlways = true });
       t.Columns.Add(new ColumnMetadata { Name = "valid_to", Type = "DATETIME2", IsGeneratedAlways = true });
@@ -681,7 +670,7 @@ public class SchemaValidatorTests
     task.ValidationWarnings.Should().NotContainMatch("*Should have DEFAULT 1*");
   }
 
-  // ─── Per-table overrides in validator ───────────────────────────
+  // --- Per-table overrides in validator ------------------------------------
 
   [Fact]
   public void Validate_PerTableOverride_SkipsTemporalValidation()
@@ -702,7 +691,7 @@ public class SchemaValidatorTests
     TableMetadata table = CreateTable("special_table", t =>
     {
       t.HasTemporalVersioning = true;
-      // Deliberately missing temporal columns — should not produce errors
+      // Deliberately missing temporal columns -- should not produce errors
     });
 
     (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table), config);

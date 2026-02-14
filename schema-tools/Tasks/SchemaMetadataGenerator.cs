@@ -10,7 +10,14 @@ using MSTask = Microsoft.Build.Utilities.Task;
 namespace SchemaTools.Tasks;
 
 /// <summary>
-/// MSBuild task to generate complete schema metadata from SQL table files
+/// MSBuild task to extract schema metadata by parsing SQL table files directly.
+/// 
+/// Use this when you need metadata WITHOUT building a .dacpac, such as:
+/// - Offline documentation generation
+/// - Development/testing workflows
+/// - CI pipelines that don't require full compilation
+/// 
+/// For authoritative metadata from compiled schema, use SchemaMetadataExtractor post-build.
 /// </summary>
 public class SchemaMetadataGenerator : MSTask
 {
@@ -26,7 +33,7 @@ public class SchemaMetadataGenerator : MSTask
 
   public string ConfigFile { get; set; } = string.Empty;
 
-  // Legacy parameters (fallback if no config file)
+  // Fallback defaults (used when config file not provided)
   public string SqlServerVersion { get; set; } = "Sql160";
   public string DefaultSchema { get; set; } = "dbo";
   public string DatabaseName { get; set; } = "Database";
@@ -41,11 +48,11 @@ public class SchemaMetadataGenerator : MSTask
     try
     {
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
-          "════════════════════════════════════════════════════════");
+          "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
           "  Schema Metadata Generator");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
-          "════════════════════════════════════════════════════════");
+          "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, string.Empty);
 
       // Load configuration
@@ -94,7 +101,7 @@ public class SchemaMetadataGenerator : MSTask
             totalConstraints += metadata.Constraints.CheckConstraints.Count;
 
             Log.LogMessage(Microsoft.Build.Framework.MessageImportance.Low,
-                $"         ✓ {metadata.Columns.Count} columns, " +
+                $"         + {metadata.Columns.Count} columns, " +
                 $"{metadata.Constraints.ForeignKeys.Count} FKs, " +
                 $"HasActive={metadata.HasActiveColumn}, HasTemporal={metadata.HasTemporalVersioning}, " +
                 $"HasSoftDelete={metadata.HasSoftDelete}, IsPolymorphic={metadata.IsPolymorphic}");
@@ -102,7 +109,7 @@ public class SchemaMetadataGenerator : MSTask
         }
         catch (Exception ex)
         {
-          Log.LogWarning($"         ⚠ Failed to parse {fileName}: {ex.Message}");
+          Log.LogWarning($"         ! Failed to parse {fileName}: {ex.Message}");
           parseErrors++;
         }
       }
@@ -111,7 +118,7 @@ public class SchemaMetadataGenerator : MSTask
 
       if (parseErrors > 0)
       {
-        Log.LogWarning($"⚠ {parseErrors} file(s) had parse errors");
+        Log.LogWarning($"! {parseErrors} file(s) had parse errors");
       }
 
       // Calculate statistics
@@ -122,7 +129,6 @@ public class SchemaMetadataGenerator : MSTask
         SoftDeleteTables = tableMetadata.Count(t => t.HasSoftDelete),
         AppendOnlyTables = tableMetadata.Count(t => t.IsAppendOnly),
         PolymorphicTables = tableMetadata.Count(t => t.IsPolymorphic),
-        TriggersToGenerate = tableMetadata.Count(t => t.Triggers.HardDelete.Generate),
         TotalColumns = totalColumns,
         TotalConstraints = totalConstraints
       };
@@ -153,7 +159,7 @@ public class SchemaMetadataGenerator : MSTask
         Directory.CreateDirectory(outputDir);
       }
 
-      // Serialize to JSON
+      // Serialise to JSON
       var options = new JsonSerializerOptions
       {
         WriteIndented = true,
@@ -165,20 +171,19 @@ public class SchemaMetadataGenerator : MSTask
       File.WriteAllText(OutputFile, json, System.Text.Encoding.UTF8);
 
       // Log summary
-      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "════════════════════════════════════════════════════════");
+      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "  Generation Summary");
-      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "════════════════════════════════════════════════════════");
+      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"Total tables:          {stats.TotalTables}");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"Temporal tables:       {stats.TemporalTables}");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"Soft delete tables:    {stats.SoftDeleteTables}");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"Append-only tables:    {stats.AppendOnlyTables}");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"Polymorphic tables:    {stats.PolymorphicTables}");
-      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"Triggers to generate:  {stats.TriggersToGenerate}");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"Total columns:         {stats.TotalColumns}");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"Total constraints:     {stats.TotalConstraints}");
-      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "════════════════════════════════════════════════════════");
+      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, string.Empty);
-      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"✓ Metadata written to: {OutputFile}");
+      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"+ Metadata written to: {OutputFile}");
 
       return true;
     }
@@ -192,7 +197,7 @@ public class SchemaMetadataGenerator : MSTask
 
   private void LoadConfiguration()
   {
-    // Priority: TestConfig > ConfigFile > Legacy parameters
+    // Priority: TestConfig > ConfigFile > Fallback defaults
     if (TestConfig != null)
     {
       _config = TestConfig;
@@ -214,7 +219,7 @@ public class SchemaMetadataGenerator : MSTask
     }
     else
     {
-      // Use legacy parameters as fallback
+      // Use fallback defaults when no config file
       _config = new SchemaToolsConfig
       {
         Database = DatabaseName,
@@ -452,7 +457,7 @@ public class SchemaMetadataGenerator : MSTask
       return;
     }
 
-    // Audit columns (created_by / updated_by) → auto-wire FK
+    // Audit columns (created_by / updated_by) -> auto-wire FK
     if (string.Equals(name, cols.CreatedBy, StringComparison.OrdinalIgnoreCase) ||
         string.Equals(name, cols.UpdatedBy, StringComparison.OrdinalIgnoreCase))
     {
@@ -723,19 +728,18 @@ public class SchemaMetadataGenerator : MSTask
   {
     ColumnNamingConfig cols = effective.Columns;
 
+    // Set ActiveColumnName if the table has an active column
+    if (metadata.HasActiveColumn)
+    {
+      metadata.ActiveColumnName = cols.Active;
+    }
+
     // Detect soft delete ONLY if enabled in config
     if (effective.Features.EnableSoftDelete &&
         metadata.HasActiveColumn &&
         metadata.HasTemporalVersioning)
     {
       metadata.HasSoftDelete = true;
-
-      if (effective.Features.GenerateHardDeleteTriggers)
-      {
-        metadata.Triggers.HardDelete.Generate = true;
-        metadata.Triggers.HardDelete.Name = $"trg_{metadata.Name}_hard_delete";
-        metadata.Triggers.HardDelete.ActiveColumnName = cols.Active;
-      }
     }
 
     // Detect append-only ONLY if enabled in config
@@ -749,8 +753,6 @@ public class SchemaMetadataGenerator : MSTask
       if (hasCreatedAt && !hasUpdatedBy && !metadata.HasTemporalVersioning)
       {
         metadata.IsAppendOnly = true;
-        metadata.Triggers.HardDelete.Generate = false;
-        metadata.Triggers.HardDelete.Reason = "Append-only table - no soft delete";
       }
     }
   }

@@ -18,9 +18,20 @@ public class SchemaMetadataGeneratorTests : IDisposable
     {
       EnableSoftDelete = true,
       EnableTemporalVersioning = true,
-      GenerateHardDeleteTriggers = true,
       DetectPolymorphicPatterns = true,
       DetectAppendOnlyTables = true
+    },
+    // Set up patterns needed for polymorphic detection tests
+    Columns = new ColumnNamingConfig
+    {
+      PolymorphicPatterns = new List<PolymorphicPatternConfig>
+      {
+        new() { TypeColumn = "owner_type", IdColumn = "owner_id" },
+        new() { TypeColumn = "entity_type", IdColumn = "entity_id" },
+        new() { TypeColumn = "source_type", IdColumn = "source_id" }
+      },
+      // Set up audit FK table for audit FK injection tests
+      AuditForeignKeyTable = "individuals"
     }
   };
 
@@ -56,7 +67,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     return metadata!;
   }
 
-  // ─── Error handling ──────────────────────────────────────────────
+  // --- Error handling ------------------------------------------------------
 
   [Fact]
   public void Execute_WithMissingDirectory_ReturnsFalse()
@@ -93,7 +104,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     engine.Errors.Should().ContainMatch("*No SQL files*");
   }
 
-  // ─── Schema-level output ─────────────────────────────────────────
+  // --- Schema-level output -------------------------------------------------
 
   [Fact]
   public void Execute_WritesCorrectSchemaMetadata()
@@ -122,7 +133,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
         metadata.Tables.Sum(t => t.Columns.Count));
   }
 
-  // ─── Comment metadata extraction ────────────────────────────────
+  // --- Comment metadata extraction -----------------------------------------
 
   [Fact]
   public void Execute_ExtractsDescriptionAndCategoryFromComments()
@@ -138,7 +149,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     audit.Category.Should().Be("audit");
   }
 
-  // ─── Column extraction ──────────────────────────────────────────
+  // --- Column extraction ---------------------------------------------------
 
   [Fact]
   public void Execute_ExtractsColumnMetadata()
@@ -199,7 +210,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     validTo.IsGeneratedAlways.Should().BeTrue();
   }
 
-  // ─── Temporal versioning ────────────────────────────────────────
+  // --- Temporal versioning -------------------------------------------------
 
   [Fact]
   public void Execute_DetectsTemporalVersioning()
@@ -219,10 +230,10 @@ public class SchemaMetadataGeneratorTests : IDisposable
 
     temporal.HasTemporalVersioning.Should().BeTrue();
     temporal.HasActiveColumn.Should().BeFalse();
-    temporal.HasSoftDelete.Should().BeFalse("temporal alone is not soft delete — needs active column too");
+    temporal.HasSoftDelete.Should().BeFalse("temporal alone is not soft delete -- needs active column too");
   }
 
-  // ─── Soft delete pattern ────────────────────────────────────────
+  // --- Soft delete pattern -------------------------------------------------
 
   [Fact]
   public void Execute_DetectsSoftDeletePattern()
@@ -233,8 +244,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     table.HasTemporalVersioning.Should().BeTrue();
     table.HasActiveColumn.Should().BeTrue();
     table.HasSoftDelete.Should().BeTrue();
-    table.Triggers.HardDelete.Generate.Should().BeTrue();
-    table.Triggers.HardDelete.Name.Should().Be("trg_soft_delete_table_hard_delete");
+    table.ActiveColumnName.Should().Be("active");
   }
 
   [Fact]
@@ -249,23 +259,9 @@ public class SchemaMetadataGeneratorTests : IDisposable
     table.HasActiveColumn.Should().BeTrue("active column is still detected");
     table.HasTemporalVersioning.Should().BeTrue("temporal is still detected");
     table.HasSoftDelete.Should().BeFalse("soft delete feature is disabled");
-    table.Triggers.HardDelete.Generate.Should().BeFalse();
   }
 
-  [Fact]
-  public void Execute_WithTriggersDisabled_SoftDeleteWithoutTrigger()
-  {
-    SchemaToolsConfig config = CreateTestConfig();
-    config.Features.GenerateHardDeleteTriggers = false;
-
-    SchemaMetadata metadata = RunGenerator(config);
-    TableMetadata table = metadata.Tables.First(t => t.Name == "soft_delete_table");
-
-    table.HasSoftDelete.Should().BeTrue("soft delete is still detected");
-    table.Triggers.HardDelete.Generate.Should().BeFalse("trigger generation is disabled");
-  }
-
-  // ─── Polymorphic pattern ────────────────────────────────────────
+  // --- Polymorphic pattern -------------------------------------------------
 
   [Fact]
   public void Execute_DetectsPolymorphicPattern()
@@ -307,7 +303,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     check.Expression.Should().ContainEquivalentOf("individual");
   }
 
-  // ─── Append-only pattern ────────────────────────────────────────
+  // --- Append-only pattern -------------------------------------------------
 
   [Fact]
   public void Execute_DetectsAppendOnlyPattern()
@@ -318,7 +314,6 @@ public class SchemaMetadataGeneratorTests : IDisposable
     audit.IsAppendOnly.Should().BeTrue(
         "audit_log has created_at, no updated_by, and no temporal versioning");
     audit.HasSoftDelete.Should().BeFalse();
-    audit.Triggers.HardDelete.Generate.Should().BeFalse();
   }
 
   [Fact]
@@ -333,7 +328,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     audit.IsAppendOnly.Should().BeFalse("append-only detection is disabled");
   }
 
-  // ─── Foreign key constraints ────────────────────────────────────
+  // --- Foreign key constraints ---------------------------------------------
 
   [Fact]
   public void Execute_ExtractsForeignKeyConstraints()
@@ -362,7 +357,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     entityId.ForeignKey.Column.Should().Be("id");
   }
 
-  // ─── Audit column convention ────────────────────────────────────
+  // --- Audit column convention ---------------------------------------------
 
   [Fact]
   public void Execute_InjectsConventionalForeignKeysForAuditColumns()
@@ -380,7 +375,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     updatedBy.ForeignKey!.Table.Should().Be("individuals");
   }
 
-  // ─── Primary key constraint metadata ────────────────────────────
+  // --- Primary key constraint metadata -------------------------------------
 
   [Fact]
   public void Execute_ExtractsPrimaryKeyConstraint()
@@ -395,7 +390,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     audit.Constraints.PrimaryKey.IsClustered.Should().BeTrue();
   }
 
-  // ─── Check constraint on non-polymorphic column ────────────────
+  // --- Check constraint on non-polymorphic column -------------------------
 
   [Fact]
   public void Execute_ExtractsCheckConstraintOnNonPolymorphicColumn()
@@ -407,7 +402,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
         c.Name == "ck_audit_log_action");
   }
 
-  // ─── Configurable column names ──────────────────────────────────
+  // --- Configurable column names -------------------------------------------
 
   [Fact]
   public void Execute_CustomActiveColumn_DetectsSoftDelete()
@@ -421,7 +416,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     table.HasActiveColumn.Should().BeTrue("is_enabled matches configured active column");
     table.HasTemporalVersioning.Should().BeTrue();
     table.HasSoftDelete.Should().BeTrue();
-    table.Triggers.HardDelete.ActiveColumnName.Should().Be("is_enabled");
+    table.ActiveColumnName.Should().Be("is_enabled");
   }
 
   [Fact]
@@ -506,7 +501,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
   public void Execute_CustomAppendOnlyColumns_DetectsPattern()
   {
     SchemaToolsConfig config = CreateTestConfig();
-    // audit_log has created_at but not updated_by → append-only with defaults
+    // audit_log has created_at but not updated_by -> append-only with defaults
     // Changing updatedBy to something else should still detect append-only
     // (no "editor" column in audit_log, so !hasUpdatedBy remains true)
     config.Columns.UpdatedBy = "editor";
@@ -518,7 +513,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
         "audit_log has created_at and no 'editor' column, and no temporal versioning");
   }
 
-  // ─── TableFiles (ITaskItem[]) ───────────────────────────────────
+  // --- TableFiles (ITaskItem[]) --------------------------------------------
 
   [Fact]
   public void Execute_WithTableFiles_ProcessesSpecifiedFiles()
@@ -603,7 +598,7 @@ public class SchemaMetadataGeneratorTests : IDisposable
     engine.Errors.Should().ContainMatch("*No TableFiles or TablesDirectory*");
   }
 
-  // ─── Per-table overrides ────────────────────────────────────────
+  // --- Per-table overrides -------------------------------------------------
 
   [Fact]
   public void Execute_PerTableOverride_DisablesSoftDeleteForSpecificTable()
@@ -619,7 +614,6 @@ public class SchemaMetadataGeneratorTests : IDisposable
 
     softDelete.HasActiveColumn.Should().BeTrue("active column is still detected");
     softDelete.HasSoftDelete.Should().BeFalse("soft delete is disabled for this table");
-    softDelete.Triggers.HardDelete.Generate.Should().BeFalse();
   }
 
   [Fact]

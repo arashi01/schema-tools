@@ -84,14 +84,7 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
                     }
             ]
       },
-      Triggers = new TriggerConfiguration
-      {
-        HardDelete = new HardDeleteTrigger
-        {
-          Generate = true,
-          Name = "trg_users_hard_delete"
-        }
-      }
+      ActiveColumnName = "active"
     };
 
     var departments = new TableMetadata
@@ -127,8 +120,7 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
         SoftDeleteTables = 1,
         AppendOnlyTables = 1,
         TotalColumns = 7,
-        TotalConstraints = 3,
-        TriggersToGenerate = 1
+        TotalConstraints = 3
       },
       Categories = new Dictionary<string, string>
       {
@@ -153,7 +145,7 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
     return File.ReadAllText(outputFile);
   }
 
-  // ─── Document structure ─────────────────────────────────────────
+  // --- Document structure --------------------------------------------------
 
   [Fact]
   public void Execute_GeneratesDocumentWithTitle()
@@ -193,7 +185,7 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
     md.Should().Contain("*Core business entities*");
   }
 
-  // ─── Table detail sections ──────────────────────────────────────
+  // --- Table detail sections -----------------------------------------------
 
   [Fact]
   public void Execute_RendersTableDescription()
@@ -231,11 +223,11 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
     md.Should().Contain("| `id` |");
     md.Should().Contain("PK");
     md.Should().Contain("UNIQUE");
-    md.Should().Contain("FK→individuals");
+    md.Should().Contain("FK->individuals");
     md.Should().Contain("DEFAULT 1");
   }
 
-  // ─── Constraint sections ────────────────────────────────────────
+  // --- Constraint sections -------------------------------------------------
 
   [Fact]
   public void Execute_RendersForeignKeys()
@@ -244,7 +236,7 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
 
     md.Should().Contain("**Foreign Keys:**");
     md.Should().Contain("`fk_users_department`");
-    md.Should().Contain("→ departments(id)");
+    md.Should().Contain("-> departments(id)");
   }
 
   [Fact]
@@ -256,7 +248,7 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
     md.Should().Contain("`ck_users_email`");
   }
 
-  // ─── ER diagrams ────────────────────────────────────────────────
+  // --- ER diagrams ---------------------------------------------------------
 
   [Fact]
   public void Execute_GeneratesMermaidErDiagram()
@@ -277,7 +269,7 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
     md.Should().NotContain("```mermaid");
   }
 
-  // ─── Feature toggles ────────────────────────────────────────────
+  // --- Feature toggles -----------------------------------------------------
 
   [Fact]
   public void Execute_WithStatisticsDisabled_OmitsStatistics()
@@ -298,7 +290,7 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
     md.Should().NotContain("**Check Constraints:**");
   }
 
-  // ─── Output file ────────────────────────────────────────────────
+  // --- Output file ---------------------------------------------------------
 
   [Fact]
   public void Execute_CreatesOutputDirectory()

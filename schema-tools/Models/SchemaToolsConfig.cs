@@ -3,6 +3,31 @@
 namespace SchemaTools.Models;
 
 /// <summary>
+/// Soft-delete trigger mode for parent tables.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum SoftDeleteMode
+{
+  /// <summary>
+  /// Cascade soft-delete to children automatically (default).
+  /// When parent.active = 0, all children.active = 0.
+  /// </summary>
+  Cascade,
+
+  /// <summary>
+  /// Restrict soft-delete if active children exist.
+  /// Must soft-delete children first before parent.
+  /// </summary>
+  Restrict,
+
+  /// <summary>
+  /// Ignore - no trigger generated for this table.
+  /// Table excluded from soft-delete handling entirely.
+  /// </summary>
+  Ignore
+}
+
+/// <summary>
 /// Per-project configuration for schema tools
 /// </summary>
 public class SchemaToolsConfig
@@ -48,6 +73,12 @@ public class SchemaToolsConfig
   /// </summary>
   [JsonPropertyName("columns")]
   public ColumnNamingConfig Columns { get; set; } = new();
+
+  /// <summary>
+  /// Purge procedure configuration
+  /// </summary>
+  [JsonPropertyName("purge")]
+  public PurgeConfig Purge { get; set; } = new();
 
   /// <summary>
   /// Custom category descriptions
@@ -136,7 +167,8 @@ public class SchemaToolsConfig
       {
         EnableSoftDelete = Features.EnableSoftDelete,
         EnableTemporalVersioning = Features.EnableTemporalVersioning,
-        GenerateHardDeleteTriggers = Features.GenerateHardDeleteTriggers,
+        SoftDeleteMode = Features.SoftDeleteMode,
+        GenerateReactivationGuards = Features.GenerateReactivationGuards,
         DetectPolymorphicPatterns = Features.DetectPolymorphicPatterns,
         DetectAppendOnlyTables = Features.DetectAppendOnlyTables
       },
@@ -151,6 +183,7 @@ public class SchemaToolsConfig
       },
       Documentation = Documentation,
       Columns = Columns,
+      Purge = Purge,
       Categories = Categories,
       Overrides = Overrides
     };
@@ -164,7 +197,8 @@ public class SchemaToolsConfig
     {
       EnableSoftDelete = over.EnableSoftDelete ?? baseConfig.EnableSoftDelete,
       EnableTemporalVersioning = over.EnableTemporalVersioning ?? baseConfig.EnableTemporalVersioning,
-      GenerateHardDeleteTriggers = over.GenerateHardDeleteTriggers ?? baseConfig.GenerateHardDeleteTriggers,
+      SoftDeleteMode = over.SoftDeleteMode ?? baseConfig.SoftDeleteMode,
+      GenerateReactivationGuards = over.GenerateReactivationGuards ?? baseConfig.GenerateReactivationGuards,
       DetectPolymorphicPatterns = over.DetectPolymorphicPatterns ?? baseConfig.DetectPolymorphicPatterns,
       DetectAppendOnlyTables = over.DetectAppendOnlyTables ?? baseConfig.DetectAppendOnlyTables
     };
@@ -189,7 +223,7 @@ public class SchemaToolsConfig
 public class FeatureConfig
 {
   /// <summary>
-  /// Enable soft delete pattern (temporal + active column + hard delete triggers)
+  /// Enable soft delete pattern (temporal + active column)
   /// </summary>
   [JsonPropertyName("enableSoftDelete")]
   public bool EnableSoftDelete { get; set; } = true;
@@ -201,10 +235,18 @@ public class FeatureConfig
   public bool EnableTemporalVersioning { get; set; } = true;
 
   /// <summary>
-  /// Generate hard-delete triggers for soft-delete tables
+  /// Default soft-delete mode for parent tables.
+  /// Can be overridden per-table via config overrides.
   /// </summary>
-  [JsonPropertyName("generateHardDeleteTriggers")]
-  public bool GenerateHardDeleteTriggers { get; set; } = true;
+  [JsonPropertyName("softDeleteMode")]
+  public SoftDeleteMode SoftDeleteMode { get; set; } = SoftDeleteMode.Cascade;
+
+  /// <summary>
+  /// Generate reactivation guard triggers for child tables.
+  /// These prevent reactivating a child when its parent is inactive.
+  /// </summary>
+  [JsonPropertyName("generateReactivationGuards")]
+  public bool GenerateReactivationGuards { get; set; } = true;
 
   /// <summary>
   /// Detect and document polymorphic patterns
@@ -310,6 +352,18 @@ public class ColumnNamingConfig
   public string Active { get; set; } = "active";
 
   /// <summary>
+  /// Value indicating active state (used in generated SQL)
+  /// </summary>
+  [JsonPropertyName("activeValue")]
+  public string ActiveValue { get; set; } = "1";
+
+  /// <summary>
+  /// Value indicating inactive/deleted state (used in generated SQL)
+  /// </summary>
+  [JsonPropertyName("inactiveValue")]
+  public string InactiveValue { get; set; } = "0";
+
+  /// <summary>
   /// Append-only timestamp column name
   /// </summary>
   [JsonPropertyName("createdAt")]
@@ -328,6 +382,12 @@ public class ColumnNamingConfig
   public string UpdatedBy { get; set; } = "updated_by";
 
   /// <summary>
+  /// SQL data type for the updated_by column (used in generated triggers)
+  /// </summary>
+  [JsonPropertyName("updatedByType")]
+  public string UpdatedByType { get; set; } = "UNIQUEIDENTIFIER";
+
+  /// <summary>
   /// Temporal period start column name
   /// </summary>
   [JsonPropertyName("validFrom")]
@@ -340,20 +400,48 @@ public class ColumnNamingConfig
   public string ValidTo { get; set; } = "valid_to";
 
   /// <summary>
-  /// Table that audit columns (created_by, updated_by) reference as a foreign key
+  /// Table that audit columns (created_by, updated_by) reference as a foreign key.
+  /// Leave empty if not applicable.
   /// </summary>
   [JsonPropertyName("auditForeignKeyTable")]
-  public string AuditForeignKeyTable { get; set; } = "individuals";
+  public string AuditForeignKeyTable { get; set; } = string.Empty;
 
   /// <summary>
-  /// Polymorphic type/ID column pairs for detection
+  /// Polymorphic type/ID column pairs for detection.
+  /// Empty by default; add patterns as needed.
   /// </summary>
   [JsonPropertyName("polymorphicPatterns")]
-  public List<PolymorphicPatternConfig> PolymorphicPatterns { get; set; } = new()
-  {
-    new() { TypeColumn = "owner_type", IdColumn = "owner_id" },
-    new() { TypeColumn = "account_type", IdColumn = "account_id" }
-  };
+  public List<PolymorphicPatternConfig> PolymorphicPatterns { get; set; } = new();
+}
+
+/// <summary>
+/// Purge procedure configuration
+/// </summary>
+public class PurgeConfig
+{
+  /// <summary>
+  /// Whether to generate the purge procedure
+  /// </summary>
+  [JsonPropertyName("enabled")]
+  public bool Enabled { get; set; } = true;
+
+  /// <summary>
+  /// Name of the generated purge procedure
+  /// </summary>
+  [JsonPropertyName("procedureName")]
+  public string ProcedureName { get; set; } = "usp_purge_soft_deleted";
+
+  /// <summary>
+  /// Default grace period in days before soft-deleted records can be purged
+  /// </summary>
+  [JsonPropertyName("defaultGracePeriodDays")]
+  public int DefaultGracePeriodDays { get; set; } = 90;
+
+  /// <summary>
+  /// Default batch size for purge operations (0 = unlimited)
+  /// </summary>
+  [JsonPropertyName("defaultBatchSize")]
+  public int DefaultBatchSize { get; set; } = 1000;
 }
 
 /// <summary>
@@ -382,7 +470,7 @@ public class TableOverrideConfig
 }
 
 /// <summary>
-/// Nullable feature overrides — null means inherit from global config
+/// Nullable feature overrides - null means inherit from global config
 /// </summary>
 public class FeatureOverrideConfig
 {
@@ -392,8 +480,17 @@ public class FeatureOverrideConfig
   [JsonPropertyName("enableTemporalVersioning")]
   public bool? EnableTemporalVersioning { get; set; }
 
-  [JsonPropertyName("generateHardDeleteTriggers")]
-  public bool? GenerateHardDeleteTriggers { get; set; }
+  /// <summary>
+  /// Override the soft-delete mode for this table.
+  /// </summary>
+  [JsonPropertyName("softDeleteMode")]
+  public SoftDeleteMode? SoftDeleteMode { get; set; }
+
+  /// <summary>
+  /// Override reactivation guard generation for this table.
+  /// </summary>
+  [JsonPropertyName("generateReactivationGuards")]
+  public bool? GenerateReactivationGuards { get; set; }
 
   [JsonPropertyName("detectPolymorphicPatterns")]
   public bool? DetectPolymorphicPatterns { get; set; }

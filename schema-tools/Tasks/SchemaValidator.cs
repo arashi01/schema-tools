@@ -39,11 +39,11 @@ public class SchemaValidator : MSTask
     try
     {
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
-          "════════════════════════════════════════════════════════");
+          "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
           "  Schema Validator");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
-          "════════════════════════════════════════════════════════");
+          "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, string.Empty);
 
       // Load configuration
@@ -85,13 +85,13 @@ public class SchemaValidator : MSTask
       bool treatAsErrors = GetValidationSetting(TreatWarningsAsErrors, _config.Validation.TreatWarningsAsErrors);
 
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, string.Empty);
-      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "════════════════════════════════════════════════════════");
+      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "  Validation Results");
-      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "════════════════════════════════════════════════════════");
+      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "============================================================");
 
       if (_warnings.Count > 0)
       {
-        Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"⚠ {_warnings.Count} warning(s):");
+        Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"! {_warnings.Count} warning(s):");
         foreach (string warning in _warnings)
         {
           if (treatAsErrors)
@@ -104,7 +104,7 @@ public class SchemaValidator : MSTask
 
       if (_errors.Count > 0)
       {
-        Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"✗ {_errors.Count} error(s):");
+        Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"X {_errors.Count} error(s):");
         foreach (string error in _errors)
         {
           Log.LogError($"  {error}");
@@ -120,8 +120,8 @@ public class SchemaValidator : MSTask
       }
 
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High,
-          $"✓ Schema validation passed: {metadata.Tables.Count} tables validated successfully");
-      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "════════════════════════════════════════════════════════");
+          $"+ Schema validation passed: {metadata.Tables.Count} tables validated successfully");
+      Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, "============================================================");
 
       return true;
     }
@@ -452,7 +452,7 @@ public class SchemaValidator : MSTask
     {
       if (HasCycle(table.Name, dependencies, visited, recursionStack, out List<string>? cycle))
       {
-        _errors.Add($"Circular foreign key dependency detected: {string.Join(" → ", cycle)}");
+        _errors.Add($"Circular foreign key dependency detected: {string.Join(" -> ", cycle)}");
       }
     }
   }
@@ -493,8 +493,6 @@ public class SchemaValidator : MSTask
 
   private void ValidateSoftDeleteConsistency(SchemaMetadata metadata)
   {
-    string activeColumnName = _config.Columns.Active;
-
     foreach (TableMetadata? table in metadata.Tables.Where(t => t.HasSoftDelete))
     {
       // Must have active column
@@ -509,13 +507,8 @@ public class SchemaValidator : MSTask
         _errors.Add($"{table.Name}: Marked as HasSoftDelete but HasTemporalVersioning is false");
       }
 
-      // Must have trigger generation enabled
-      if (!table.Triggers.HardDelete.Generate)
-      {
-        _errors.Add($"{table.Name}: HasSoftDelete is true but hard delete trigger generation is disabled");
-      }
-
       // Active column should have default value of 1
+      string activeColumnName = table.ActiveColumnName ?? _config.Columns.Active;
       ColumnMetadata? activeColumn = table.Columns.FirstOrDefault(c =>
           string.Equals(c.Name, activeColumnName, StringComparison.OrdinalIgnoreCase));
       if (activeColumn != null && activeColumn.DefaultValue != "1")
