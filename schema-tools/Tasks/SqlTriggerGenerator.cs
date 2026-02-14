@@ -708,7 +708,7 @@ public class SqlTriggerGenerator : MSTask
   /// <summary>
   /// Generates a reactivation cascade trigger for a parent table.
   /// When the parent is reactivated (active 0->1), auto-reactivate children
-  /// that were soft-deleted at the same time (within 2 seconds based on valid_to).
+  /// that were soft-deleted at the same time (within configurable tolerance based on valid_to).
   /// </summary>
   private string GenerateReactivationCascadeTrigger(
     TableAnalysis parent,
@@ -718,6 +718,7 @@ public class SqlTriggerGenerator : MSTask
     string schema = parent.Schema ?? DefaultSchema;
     string activeColumn = parent.ActiveColumnName ?? "active";
     string validToColumn = parent.ValidToColumn ?? columns.ValidTo;
+    int toleranceMs = parent.ReactivationCascadeToleranceMs;
     List<string> primaryKeyColumns = parent.PrimaryKeyColumns.Count > 0
       ? parent.PrimaryKeyColumns
       : new List<string> { "id" };
@@ -733,7 +734,7 @@ public class SqlTriggerGenerator : MSTask
 -- Purpose:
 --   When this parent record is reactivated (active: 0 -> 1), automatically
 --   reactivate child records that were soft-deleted at the same time.
---   Uses timestamp matching (valid_to within 2 seconds) to identify children
+--   Uses timestamp matching (valid_to within {toleranceMs}ms) to identify children
 --   that were cascade-deleted together with this parent.
 --
 -- Cascades reactivation to {parent.ChildTables.Count} child table(s):");
@@ -811,7 +812,7 @@ public class SqlTriggerGenerator : MSTask
         : primaryKeyColumns;
 
       sb.AppendLine($"    -- Cascade reactivation to [{childSchema}].[{childName}]");
-      sb.AppendLine($"    -- Only reactivate children whose valid_to is within 2 seconds of parent's valid_to");
+      sb.AppendLine($"    -- Only reactivate children whose valid_to is within {toleranceMs}ms of parent's valid_to");
       sb.AppendLine($"    -- (i.e., children that were soft-deleted at the same time as this parent)");
 
       if (fkColumns.Count == 1)
@@ -828,7 +829,7 @@ public class SqlTriggerGenerator : MSTask
         sb.AppendLine($"        JOIN deleted d ON {BuildPkJoinCondition(primaryKeyColumns, "i", "d")}");
         sb.AppendLine($"        WHERE i.{activeColumn} = {columns.ActiveValue} AND d.{activeColumn} = {columns.InactiveValue}");
         sb.AppendLine($"        AND c.{fkColumns[0]} = i.{referencedColumns[0]}");
-        sb.AppendLine($"        AND ABS(DATEDIFF(SECOND, c.{childValidToColumn}, d.{validToColumn})) <= 2");
+        sb.AppendLine($"        AND ABS(DATEDIFF(MILLISECOND, c.{childValidToColumn}, d.{validToColumn})) <= {toleranceMs}");
         sb.AppendLine("    )");
         sb.AppendLine($"    AND c.{childActiveColumn} = {columns.InactiveValue};  -- Only reactivate inactive children");
       }
@@ -846,7 +847,7 @@ public class SqlTriggerGenerator : MSTask
         sb.AppendLine($"        JOIN deleted d ON {BuildPkJoinCondition(primaryKeyColumns, "i", "d")}");
         sb.AppendLine($"        WHERE i.{activeColumn} = {columns.ActiveValue} AND d.{activeColumn} = {columns.InactiveValue}");
         sb.AppendLine($"        AND {BuildFkJoinCondition(fkColumns, referencedColumns, "c", "i")}");
-        sb.AppendLine($"        AND ABS(DATEDIFF(SECOND, c.{childValidToColumn}, d.{validToColumn})) <= 2");
+        sb.AppendLine($"        AND ABS(DATEDIFF(MILLISECOND, c.{childValidToColumn}, d.{validToColumn})) <= {toleranceMs}");
         sb.AppendLine("    )");
         sb.AppendLine($"    AND c.{childActiveColumn} = {columns.InactiveValue};  -- Only reactivate inactive children");
       }

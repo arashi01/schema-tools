@@ -708,7 +708,7 @@ public class SqlTriggerGeneratorTests : IDisposable
     content.Should().Contain("trg_users_cascade_reactivation");
     content.Should().Contain("AFTER UPDATE");
     // Verify timestamp matching logic is present
-    content.Should().Contain("DATEDIFF(SECOND");
+    content.Should().Contain("DATEDIFF(MILLISECOND");
     content.Should().Contain("valid_to");
   }
 
@@ -791,8 +791,8 @@ public class SqlTriggerGeneratorTests : IDisposable
     content.Should().Contain("[dbo].[settings]");
     // Should check for reactivation (active: 0 -> 1)
     content.Should().Contain("i.active = 1 AND d.active = 0");
-    // Should have 2-second tolerance for timestamp matching
-    content.Should().Contain("<= 2");
+    // Should have default tolerance for timestamp matching
+    content.Should().Contain("<= 2000");
     // Should set children to active
     content.Should().Contain("c.active = 1");
   }
@@ -915,6 +915,43 @@ public class SqlTriggerGeneratorTests : IDisposable
     string content = File.ReadAllText(file);
     content.Should().Contain("c.tenant_id = i.tenant_id");
     content.Should().Contain("c.user_id = i.user_id");
+  }
+
+  [Fact]
+  public void Execute_ReactivationCascade_UsesCustomTolerance()
+  {
+    // Arrange: Custom tolerance of 500ms
+    TableAnalysis parent = new()
+    {
+      Name = "users",
+      Schema = "dbo",
+      HasSoftDelete = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "active",
+      ValidToColumn = "valid_to",
+      PrimaryKeyColumns = ["id"],
+      ChildTables = ["orders"],
+      ReactivationCascade = true,
+      ReactivationCascadeToleranceMs = 500,
+      SoftDeleteMode = SoftDeleteMode.Cascade
+    };
+    TableAnalysis child = LeafTable("orders", "user_id", "users");
+    child.ValidToColumn = "valid_to";
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    task.Execute().Should().BeTrue();
+
+    // Assert: trigger uses custom tolerance
+    string file = Path.Combine(_outputDir, "trg_users_cascade_reactivation.sql");
+    File.Exists(file).Should().BeTrue();
+    string content = File.ReadAllText(file);
+    content.Should().Contain("DATEDIFF(MILLISECOND");
+    content.Should().Contain("<= 500");
+    content.Should().NotContain("<= 2000");
+    // Header comment should reference 500ms
+    content.Should().Contain("500ms");
   }
 
   public void Dispose()

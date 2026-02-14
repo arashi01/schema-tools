@@ -176,6 +176,7 @@ public class SchemaToolsConfig
         SoftDeleteMode = Features.SoftDeleteMode,
         GenerateReactivationGuards = Features.GenerateReactivationGuards,
         ReactivationCascade = Features.ReactivationCascade,
+        ReactivationCascadeToleranceMs = Features.ReactivationCascadeToleranceMs,
         DetectPolymorphicPatterns = Features.DetectPolymorphicPatterns,
         DetectAppendOnlyTables = Features.DetectAppendOnlyTables
       },
@@ -208,6 +209,7 @@ public class SchemaToolsConfig
       SoftDeleteMode = over.SoftDeleteMode ?? baseConfig.SoftDeleteMode,
       GenerateReactivationGuards = over.GenerateReactivationGuards ?? baseConfig.GenerateReactivationGuards,
       ReactivationCascade = over.ReactivationCascade ?? baseConfig.ReactivationCascade,
+      ReactivationCascadeToleranceMs = over.ReactivationCascadeToleranceMs ?? baseConfig.ReactivationCascadeToleranceMs,
       DetectPolymorphicPatterns = over.DetectPolymorphicPatterns ?? baseConfig.DetectPolymorphicPatterns,
       DetectAppendOnlyTables = over.DetectAppendOnlyTables ?? baseConfig.DetectAppendOnlyTables
     };
@@ -276,6 +278,14 @@ public class FeatureConfig
   /// </summary>
   [JsonPropertyName("reactivationCascade")]
   public bool ReactivationCascade { get; set; } = false;
+
+  /// <summary>
+  /// Tolerance in milliseconds for matching child soft-delete timestamps to the parent
+  /// during reactivation cascade. Only children whose valid_to is within this tolerance
+  /// of the parent's valid_to are reactivated.
+  /// </summary>
+  [JsonPropertyName("reactivationCascadeToleranceMs")]
+  public int ReactivationCascadeToleranceMs { get; set; } = SchemaToolsDefaults.ReactivationCascadeToleranceMs;
 }
 
 public class ValidationConfig
@@ -511,10 +521,17 @@ public class FeatureOverrideConfig
   /// <summary>
   /// Enable reactivation cascade for this table.
   /// When true, reactivating this parent will also reactivate children that
-  /// were soft-deleted at the same time (within 2 seconds based on valid_to).
+  /// were soft-deleted within the configured tolerance of the parent.
   /// </summary>
   [JsonPropertyName("reactivationCascade")]
   public bool? ReactivationCascade { get; set; }
+
+  /// <summary>
+  /// Override the reactivation cascade timestamp tolerance in milliseconds.
+  /// </summary>
+  [JsonPropertyName("reactivationCascadeToleranceMs")]
+  public int? ReactivationCascadeToleranceMs { get; set; }
+
   [JsonPropertyName("detectPolymorphicPatterns")]
   public bool? DetectPolymorphicPatterns { get; set; }
 

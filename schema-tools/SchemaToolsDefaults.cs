@@ -127,4 +127,14 @@ public static class SchemaToolsDefaults
   /// Default deleted view naming pattern for soft-deleted records.
   /// </summary>
   public const string DeletedViewNamingPattern = "vw_{table}_deleted";
+
+  // ===========================================================================
+  // Reactivation Cascade
+  // ===========================================================================
+
+  /// <summary>
+  /// Default tolerance (in milliseconds) for matching child soft-delete timestamps
+  /// to the parent during reactivation cascade.
+  /// </summary>
+  public const int ReactivationCascadeToleranceMs = 2000;
 }

@@ -342,13 +342,13 @@ For 1:1 relationships (e.g., `user` -> `user_profile`), you may want to auto-rea
 {
   "overrides": {
     "users": {
-      "features": { "reactivationCascade": true }
+      "features": { "reactivationCascade": true, "reactivationCascadeToleranceMs": 2000 }
     }
   }
 }
 ```
 
-The generated trigger only reactivates children that were soft-deleted **at the same time** as the parent (within 2 seconds based on `valid_to` timestamp):
+The generated trigger only reactivates children that were soft-deleted **at the same time** as the parent (within the configured tolerance, default 2000ms, based on `valid_to` timestamp):
 
 ```sql
 CREATE TRIGGER [dbo].[trg_users_cascade_reactivation]
@@ -370,7 +370,7 @@ BEGIN
         RETURN;
 
     -- Cascade reactivation to [dbo].[user_profile]
-    -- Only reactivate children deleted at the same time (within 2 seconds)
+    -- Only reactivate children deleted at the same time (within 2000ms)
     UPDATE c
     SET c.active = 1, c.updated_by = @updated_by
     FROM [dbo].[user_profile] c
@@ -379,7 +379,7 @@ BEGIN
         JOIN deleted d ON i.id = d.id
         WHERE i.active = 1 AND d.active = 0
         AND c.user_id = i.id
-        AND ABS(DATEDIFF(SECOND, c.valid_to, d.valid_to)) <= 2
+        AND ABS(DATEDIFF(MILLISECOND, c.valid_to, d.valid_to)) <= 2000
     )
     AND c.active = 0;
 END;
@@ -465,6 +465,7 @@ These properties are set in your `.sqlproj` file and control build integration.
 | `detectAppendOnlyTables`     | `true`      | Detect append-only tables (has `created_at`, no `updated_by`, non-temporal)                                        |
 | `generateReactivationGuards` | `true`      | Generate reactivation guard triggers for child tables                                                              |
 | `reactivationCascade`        | `false`     | Auto-reactivate children when parent is reactivated (per-table via overrides)                                      |
+| `reactivationCascadeToleranceMs` | `2000`  | Timestamp tolerance in milliseconds for reactivation cascade matching                                              |
 | `softDeleteMode`             | `"cascade"` | Trigger behaviour: `cascade` (propagate to children), `restrict` (block if children exist), `ignore` (no triggers) |
 
 ### Purge

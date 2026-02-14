@@ -302,6 +302,7 @@ public class SchemaSourceAnalyser : MSTask
       analysis.ActiveColumnName = activeColumnName;
       analysis.SoftDeleteMode = effective.Features.SoftDeleteMode;
       analysis.ReactivationCascade = effective.Features.ReactivationCascade;
+      analysis.ReactivationCascadeToleranceMs = effective.Features.ReactivationCascadeToleranceMs;
     }
 
     // Extract primary key
@@ -612,6 +613,12 @@ public class TableAnalysis
   /// that were soft-deleted at the same time.
   /// </summary>
   public bool ReactivationCascade { get; set; } = false;
+
+  /// <summary>
+  /// Tolerance in milliseconds for matching child soft-delete timestamps
+  /// during reactivation cascade.
+  /// </summary>
+  public int ReactivationCascadeToleranceMs { get; set; } = SchemaToolsDefaults.ReactivationCascadeToleranceMs;
 
   // Code generation flags
   public bool GenerateTrigger { get; set; }
