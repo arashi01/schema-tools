@@ -4,7 +4,7 @@ namespace SchemaTools.Utilities;
 
 /// <summary>
 /// Generates SQL text from ScriptDom AST fragments.
-/// TSqlFragment.ToString() returns the type name, not the SQL text —
+/// TSqlFragment.ToString() returns the type name, not the SQL text --
 /// a ScriptGenerator must be used instead.
 /// </summary>
 public static class ScriptFragmentFormatter

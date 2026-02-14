@@ -34,8 +34,8 @@ public class SchemaMetadataGenerator : MSTask
   public string ConfigFile { get; set; } = string.Empty;
 
   // Fallback defaults (used when config file not provided)
-  public string SqlServerVersion { get; set; } = "Sql160";
-  public string DefaultSchema { get; set; } = "dbo";
+  public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
+  public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
   public string DatabaseName { get; set; } = "Database";
 
   // Allow injecting config for testing
@@ -285,6 +285,7 @@ public class SchemaMetadataGenerator : MSTask
       "Sql140" => new TSql140Parser(initialQuotedIdentifiers: true),
       "Sql150" => new TSql150Parser(initialQuotedIdentifiers: true),
       "Sql160" => new TSql160Parser(initialQuotedIdentifiers: true),
+      "Sql170" => new TSql170Parser(initialQuotedIdentifiers: true),
       _ => throw new ArgumentException($"Unsupported SQL Server version: {version}")
     };
   }

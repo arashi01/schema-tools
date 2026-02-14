@@ -1,7 +1,7 @@
-{
+﻿{
   "database": "TestDB",
   "defaultSchema": "test",
-  "sqlServerVersion": "Sql160",
+  "sqlServerVersion": "Sql170",
   
   "features": {
     "enableSoftDelete": true,

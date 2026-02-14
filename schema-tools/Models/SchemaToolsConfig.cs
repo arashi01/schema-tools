@@ -42,13 +42,13 @@ public class SchemaToolsConfig
   /// Default schema name
   /// </summary>
   [JsonPropertyName("defaultSchema")]
-  public string DefaultSchema { get; set; } = "dbo";
+  public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
 
   /// <summary>
   /// SQL Server version for parser
   /// </summary>
   [JsonPropertyName("sqlServerVersion")]
-  public string SqlServerVersion { get; set; } = "Sql160";
+  public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
 
   /// <summary>
   /// Feature flags
@@ -349,55 +349,55 @@ public class ColumnNamingConfig
   /// Soft-delete active column name
   /// </summary>
   [JsonPropertyName("active")]
-  public string Active { get; set; } = "active";
+  public string Active { get; set; } = SchemaToolsDefaults.ActiveColumn;
 
   /// <summary>
   /// Value indicating active state (used in generated SQL)
   /// </summary>
   [JsonPropertyName("activeValue")]
-  public string ActiveValue { get; set; } = "1";
+  public string ActiveValue { get; set; } = SchemaToolsDefaults.ActiveValue;
 
   /// <summary>
   /// Value indicating inactive/deleted state (used in generated SQL)
   /// </summary>
   [JsonPropertyName("inactiveValue")]
-  public string InactiveValue { get; set; } = "0";
+  public string InactiveValue { get; set; } = SchemaToolsDefaults.InactiveValue;
 
   /// <summary>
   /// Append-only timestamp column name
   /// </summary>
   [JsonPropertyName("createdAt")]
-  public string CreatedAt { get; set; } = "created_at";
+  public string CreatedAt { get; set; } = SchemaToolsDefaults.CreatedAtColumn;
 
   /// <summary>
   /// Audit column: created by
   /// </summary>
   [JsonPropertyName("createdBy")]
-  public string CreatedBy { get; set; } = "created_by";
+  public string CreatedBy { get; set; } = SchemaToolsDefaults.CreatedByColumn;
 
   /// <summary>
   /// Audit column: updated by
   /// </summary>
   [JsonPropertyName("updatedBy")]
-  public string UpdatedBy { get; set; } = "updated_by";
+  public string UpdatedBy { get; set; } = SchemaToolsDefaults.UpdatedByColumn;
 
   /// <summary>
   /// SQL data type for the updated_by column (used in generated triggers)
   /// </summary>
   [JsonPropertyName("updatedByType")]
-  public string UpdatedByType { get; set; } = "UNIQUEIDENTIFIER";
+  public string UpdatedByType { get; set; } = SchemaToolsDefaults.UpdatedByType;
 
   /// <summary>
   /// Temporal period start column name
   /// </summary>
   [JsonPropertyName("validFrom")]
-  public string ValidFrom { get; set; } = "valid_from";
+  public string ValidFrom { get; set; } = SchemaToolsDefaults.ValidFromColumn;
 
   /// <summary>
   /// Temporal period end column name
   /// </summary>
   [JsonPropertyName("validTo")]
-  public string ValidTo { get; set; } = "valid_to";
+  public string ValidTo { get; set; } = SchemaToolsDefaults.ValidToColumn;
 
   /// <summary>
   /// Table that audit columns (created_by, updated_by) reference as a foreign key.
@@ -429,19 +429,19 @@ public class PurgeConfig
   /// Name of the generated purge procedure
   /// </summary>
   [JsonPropertyName("procedureName")]
-  public string ProcedureName { get; set; } = "usp_purge_soft_deleted";
+  public string ProcedureName { get; set; } = SchemaToolsDefaults.PurgeProcedureName;
 
   /// <summary>
   /// Default grace period in days before soft-deleted records can be purged
   /// </summary>
   [JsonPropertyName("defaultGracePeriodDays")]
-  public int DefaultGracePeriodDays { get; set; } = 90;
+  public int DefaultGracePeriodDays { get; set; } = SchemaToolsDefaults.DefaultGracePeriodDays;
 
   /// <summary>
   /// Default batch size for purge operations (0 = unlimited)
   /// </summary>
   [JsonPropertyName("defaultBatchSize")]
-  public int DefaultBatchSize { get; set; } = 1000;
+  public int DefaultBatchSize { get; set; } = SchemaToolsDefaults.DefaultBatchSize;
 }
 
 /// <summary>
@@ -500,7 +500,7 @@ public class FeatureOverrideConfig
 }
 
 /// <summary>
-/// Nullable validation overrides — null means inherit from global config
+/// Nullable validation overrides -- null means inherit from global config
 /// </summary>
 public class ValidationOverrideConfig
 {

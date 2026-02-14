@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
-  <!-- ═══════════════════════════════════════════════════════════════════════════════
+  <!-- =============================================================================
        SCHEMA TOOLS CONFIGURATION
        
        Output Strategy:
@@ -9,7 +9,7 @@
          Intermediate - Generated files placed in obj/IntermediateOutputPath (transient, not committed)
        
        All paths can be explicitly overridden regardless of strategy.
-       ═══════════════════════════════════════════════════════════════════════════════ -->
+       ============================================================================= -->
 
   <PropertyGroup>
     <!-- Master enable -->
@@ -33,9 +33,9 @@
     <SchemaTools_TFM Condition="'$(MSBuildRuntimeType)' == 'Core'">net10.0</SchemaTools_TFM>
   </PropertyGroup>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════════════
+  <!-- =============================================================================
        OUTPUT PATH DEFAULTS (by strategy)
-       ═══════════════════════════════════════════════════════════════════════════════ -->
+       ============================================================================= -->
 
   <!-- Strategy: Source - paths in project directory (committed to source control) -->
   <PropertyGroup Condition="'$(SchemaToolsOutputStrategy)' == 'Source'">
@@ -58,9 +58,9 @@
     <SchemaToolsAnalysisOutput Condition="'$(SchemaToolsAnalysisOutput)' == ''">$(IntermediateOutputPath)schema-analysis.json</SchemaToolsAnalysisOutput>
   </PropertyGroup>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════════════
+  <!-- =============================================================================
        TASK DEFINITIONS
-       ═══════════════════════════════════════════════════════════════════════════════ -->
+       ============================================================================= -->
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaSourceAnalyser"
              AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
@@ -83,11 +83,11 @@
   <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataGenerator"
              AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
 
-  <!-- ═══════════════════════════════════════════════════════════════════════════════
+  <!-- =============================================================================
        PRE-BUILD TARGETS
        These run before SqlBuild to generate triggers and procedures that will be
        included in the .dacpac
-       ═══════════════════════════════════════════════════════════════════════════════ -->
+       ============================================================================= -->
 
   <!-- Phase 1: Analyse source files to build FK graph and detect patterns -->
   <Target Name="SchemaToolsAnalyse"
@@ -139,10 +139,10 @@
     </ItemGroup>
   </Target>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════════════
+  <!-- =============================================================================
        POST-BUILD TARGETS
        These run after SqlBuild to validate and document the compiled .dacpac
-       ═══════════════════════════════════════════════════════════════════════════════ -->
+       ============================================================================= -->
 
   <!-- Phase 5: Extract authoritative metadata from compiled .dacpac -->
   <Target Name="SchemaToolsExtractMetadata"

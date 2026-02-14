@@ -11,7 +11,7 @@ public class SchemaMetadata
   public string Schema { get; set; } = "./schema-metadata.schema.json";
 
   [JsonPropertyName("version")]
-  public string Version { get; set; } = "1.0.0";
+  public string Version { get; set; } = SchemaToolsDefaults.MetadataVersion;
 
   [JsonPropertyName("generatedAt")]
   public DateTime GeneratedAt { get; set; }
@@ -23,10 +23,10 @@ public class SchemaMetadata
   public string Database { get; set; } = "Database";
 
   [JsonPropertyName("defaultSchema")]
-  public string DefaultSchema { get; set; } = "dbo";
+  public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
 
   [JsonPropertyName("sqlServerVersion")]
-  public string SqlServerVersion { get; set; } = "Sql160";
+  public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
 
   [JsonPropertyName("tables")]
   public List<TableMetadata> Tables { get; set; } = new();

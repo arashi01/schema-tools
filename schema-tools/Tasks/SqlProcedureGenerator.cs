@@ -32,17 +32,17 @@ public class SqlProcedureGenerator : MSTask
   /// <summary>
   /// Schema for generated procedures
   /// </summary>
-  public string ProcedureSchema { get; set; } = "dbo";
+  public string ProcedureSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
 
   /// <summary>
   /// Name of the main purge procedure
   /// </summary>
-  public string PurgeProcedureName { get; set; } = "usp_purge_soft_deleted";
+  public string PurgeProcedureName { get; set; } = SchemaToolsDefaults.PurgeProcedureName;
 
   /// <summary>
   /// Default grace period in days before hard delete is allowed
   /// </summary>
-  public int DefaultGracePeriodDays { get; set; } = 90;
+  public int DefaultGracePeriodDays { get; set; } = SchemaToolsDefaults.DefaultGracePeriodDays;
 
   /// <summary>
   /// Force regeneration even if files exist
