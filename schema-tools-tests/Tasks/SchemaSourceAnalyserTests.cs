@@ -801,6 +801,57 @@ GO
     TableAnalysis parent = analysis.Tables.Single(t => t.Name == "countries");
     parent.ChildTables.Should().Contain("dialling_codes");
   }
+
+  [Fact]
+  public void Execute_MultipleFksToSameParent_DeduplicatesChildTables()
+  {
+    CreateTableFile("users.sql", @"
+CREATE TABLE [dbo].[users]
+(
+    [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+    [name] NVARCHAR(200) NOT NULL,
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_created_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_updated_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[users_history]));
+GO
+");
+
+    CreateTableFile("orders.sql", @"
+CREATE TABLE [dbo].[orders]
+(
+    [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+    [created_by] UNIQUEIDENTIFIER NOT NULL,
+    [updated_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_created_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_updated_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until]),
+    CONSTRAINT [fk_orders_created_by] FOREIGN KEY ([created_by]) REFERENCES [dbo].[users] ([id]),
+    CONSTRAINT [fk_orders_updated_by] FOREIGN KEY ([updated_by]) REFERENCES [dbo].[users] ([id])
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[orders_history]));
+GO
+");
+
+    SchemaSourceAnalyser analyser = CreateAnalyser();
+    bool result = analyser.Execute();
+
+    result.Should().BeTrue();
+
+    SourceAnalysisResult? analysis = ReadAnalysisResult();
+    analysis.Should().NotBeNull();
+
+    TableAnalysis parent = analysis!.Tables.Single(t => t.Name == "users");
+    parent.ChildTables.Should().ContainSingle("orders",
+      "a child with multiple FKs to the same parent should appear only once");
+  }
 }
 
 
