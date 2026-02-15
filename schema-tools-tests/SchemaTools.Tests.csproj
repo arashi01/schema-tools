@@ -52,7 +52,7 @@
          The test project must reference these explicitly. -->
     <PackageReference Include="Microsoft.Build.Framework" Version="18.3.3" />
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.3.3" />
-    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0" />
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.168.0" />
     <PackageReference Include="Microsoft.SqlServer.DacFx" Version="170.3.93" />
   </ItemGroup>
 
