@@ -86,8 +86,22 @@
   <UsingTask TaskName="SchemaTools.Tasks.SqlProcedureGenerator"
              AssemblyFile="$(SchemaToolsTaskAssembly)" />
 
+  <!-- SchemaMetadataExtractor depends on DacFx. In Full Framework MSBuild (msbuild.exe),
+       SSDT's SqlBuild target may have already loaded an older DacFx version with the same
+       assembly identity (Version=170.0.0.0) into the AppDomain. Since the CLR considers
+       them identical, our bundled version cannot load, causing "Could not load schema model"
+       errors. TaskHostFactory runs the task in a separate process, avoiding the conflict.
+       .NET Core MSBuild uses AssemblyLoadContext isolation, so no conflict arises. -->
   <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataExtractor"
-             AssemblyFile="$(SchemaToolsTaskAssembly)" />
+             AssemblyFile="$(SchemaToolsTaskAssembly)"
+             TaskFactory="TaskHostFactory"
+             Condition="'$(MSBuildRuntimeType)' != 'Core'">
+    <Task Runtime="CLR4" Architecture="CurrentArchitecture" />
+  </UsingTask>
+
+  <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataExtractor"
+             AssemblyFile="$(SchemaToolsTaskAssembly)"
+             Condition="'$(MSBuildRuntimeType)' == 'Core'" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaValidator"
              AssemblyFile="$(SchemaToolsTaskAssembly)" />

@@ -433,13 +433,16 @@ public class SchemaSourceAnalyser : MSTask
       t => t,
       StringComparer.OrdinalIgnoreCase);
 
-    // For each FK, record the parent table's children
+    // For each FK, record the parent table's children.
+    // A child with multiple FKs to the same parent (e.g. created_by and updated_by
+    // both referencing users.id) must only appear once in the parent's ChildTables.
     foreach (TableAnalysis table in analysis.Tables)
     {
       foreach (ForeignKeyRef fkRef in table.ForeignKeyReferences)
       {
         string parentKey = $"[{fkRef.ReferencedSchema}].[{fkRef.ReferencedTable}]";
-        if (tablesByName.TryGetValue(parentKey, out TableAnalysis? parentTable))
+        if (tablesByName.TryGetValue(parentKey, out TableAnalysis? parentTable)
+            && !parentTable.ChildTables.Contains(table.Name))
         {
           parentTable.ChildTables.Add(table.Name);
         }
