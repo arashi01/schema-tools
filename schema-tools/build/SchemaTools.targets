@@ -75,6 +75,14 @@
 
   <PropertyGroup>
     <SchemaToolsTaskAssembly Condition="'$(SchemaToolsTaskAssembly)' == ''">$(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll</SchemaToolsTaskAssembly>
+
+    <!-- net10.0 assembly path: used by Full Framework MSBuild for dotnet exec invocation.
+         SchemaToolsNet10Assembly can be overridden for source-tree references. -->
+    <SchemaToolsNet10Assembly Condition="'$(SchemaToolsNet10Assembly)' == ''">$(MSBuildThisFileDirectory)..\tasks\net10.0\SchemaTools.dll</SchemaToolsNet10Assembly>
+
+    <!-- Resolve the dotnet host for CLI invocation -->
+    <_SchemaToolsDotnet Condition="'$(_SchemaToolsDotnet)' == '' AND '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</_SchemaToolsDotnet>
+    <_SchemaToolsDotnet Condition="'$(_SchemaToolsDotnet)' == ''">dotnet</_SchemaToolsDotnet>
   </PropertyGroup>
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaSourceAnalyser"
@@ -86,8 +94,12 @@
   <UsingTask TaskName="SchemaTools.Tasks.SqlProcedureGenerator"
              AssemblyFile="$(SchemaToolsTaskAssembly)" />
 
+  <!-- SchemaMetadataExtractor is net10.0 only (DacFx-dependent).
+       In .NET Core MSBuild it runs in-process; in Full Framework MSBuild
+       it is invoked via dotnet exec (see SchemaToolsExtractMetadata target). -->
   <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataExtractor"
-             AssemblyFile="$(SchemaToolsTaskAssembly)" />
+             AssemblyFile="$(SchemaToolsTaskAssembly)"
+             Condition="'$(MSBuildRuntimeType)' == 'Core'" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaValidator"
              AssemblyFile="$(SchemaToolsTaskAssembly)" />
@@ -180,15 +192,26 @@
        These run after SqlBuild to validate and document the compiled .dacpac
        ============================================================================= -->
 
-  <!-- Phase 5: Extract authoritative metadata from compiled .dacpac -->
+  <!-- Phase 5: Extract authoritative metadata from compiled .dacpac.
+       .NET Core MSBuild: in-process task (AssemblyLoadContext provides isolation).
+       Full Framework MSBuild: dotnet exec invocation (separate process avoids
+       SSDT DacFx assembly identity collision in the shared AppDomain).
+       Requires .NET 10 SDK. -->
   <Target Name="SchemaToolsExtractMetadata"
           AfterTargets="Build"
           Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsExtractPostBuildMetadata)' == 'true'">
     <Message Text="SchemaTools: Extracting metadata from dacpac..." Importance="high" />
+
+    <!-- .NET Core MSBuild: in-process -->
     <SchemaTools.Tasks.SchemaMetadataExtractor
       DacpacPath="$(TargetPath)"
       OutputFile="$(SchemaToolsMetadataOutput)"
-      ConfigFile="$(SchemaToolsConfig)" />
+      ConfigFile="$(SchemaToolsConfig)"
+      Condition="'$(MSBuildRuntimeType)' == 'Core'" />
+
+    <!-- Full Framework MSBuild: dotnet exec -->
+    <Exec Command="&quot;$(_SchemaToolsDotnet)&quot; exec &quot;$(SchemaToolsNet10Assembly)&quot; extract-metadata --dacpac &quot;$(TargetPath)&quot; --output &quot;$(SchemaToolsMetadataOutput)&quot; --config &quot;$(SchemaToolsConfig)&quot;"
+          Condition="'$(MSBuildRuntimeType)' != 'Core'" />
   </Target>
 
   <!-- Phase 6: Validate compiled schema -->

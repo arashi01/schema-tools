@@ -27,6 +27,9 @@
          which resolves correctly for NuGet layout but not for source-tree layout.
          We re-define the UsingTask assembly via SchemaToolsTaskAssembly. -->
     <SchemaToolsTaskAssembly>$(SchemaToolsRoot)\bin\Debug\$(SchemaTools_TFM)\SchemaTools.dll</SchemaToolsTaskAssembly>
+    <!-- Override net10.0 assembly path for dotnet exec invocation (CLI fallback
+         used by Full Framework MSBuild). Points at the local build output. -->
+    <SchemaToolsNet10Assembly>$(SchemaToolsRoot)\bin\Debug\net10.0\SchemaTools.dll</SchemaToolsNet10Assembly>
   </PropertyGroup>
   <Import Project="$(SchemaToolsRoot)\build\SchemaTools.targets" />
 </Project>

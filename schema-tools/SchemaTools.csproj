@@ -6,6 +6,26 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- net10.0 doubles as a CLI executable for dotnet exec invocation.
+       Full Framework MSBuild (msbuild.exe / Visual Studio) shells out to this
+       for DacFx-dependent post-build tasks, avoiding SSDT assembly collisions.
+       UseAppHost=false: no native host needed; invoked via dotnet exec. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <OutputType>Exe</OutputType>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <!-- DacFx-dependent code is net10.0 only.
+       netstandard2.0 (Full Framework MSBuild) cannot load DacFx in-process because
+       SSDT's SqlBuild has already loaded DacFx with the same assembly identity
+       (Version=170.0.0.0, PublicKeyToken=89845dcd8080cc91) into the AppDomain.
+       Excluding these files removes the DacFx assembly reference entirely. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <Compile Remove="Extraction\**\*.cs" />
+    <Compile Remove="Tasks\SchemaMetadataExtractor.cs" />
+    <Compile Remove="Program.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="SchemaTools.Tests" />
   </ItemGroup>
@@ -81,30 +101,19 @@
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0"
                       PrivateAssets="all" />
 
-    <!-- DacFx for semantic model extraction from .dacpac.
-         For net10.0 (.NET Core MSBuild / dotnet build): bundled in package.
-         For netstandard2.0 (Full Framework MSBuild): compile-only reference.
-         In Full Framework MSBuild, SSDT loads its own DacFx into the AppDomain
-         with the same assembly identity (Version=170.0.0.0, same PublicKeyToken).
-         Bundling a second copy causes native/managed version mismatches and
-         "Could not load schema model" errors. SSDT provides DacFx at runtime. -->
-    <PackageReference Include="Microsoft.SqlServer.DacFx" Version="170.3.93"
-                      PrivateAssets="all" />
-
     <!-- Source link for debugging -->
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- For netstandard2.0 (Full Framework MSBuild), DacFx is compile-only.
-       SSDT provides DacFx at runtime with the same assembly identity
-       (Version=170.0.0.0, PublicKeyToken=89845dcd8080cc91).
-       Bundling a second copy causes native/managed version mismatches.
-       ExcludeAssets="runtime;native" is the .NET equivalent of Maven's
-       "provided" scope: compile against the API but do not bundle it
-       or any of its transitive dependencies. -->
+  <!-- DacFx: net10.0 only. The netstandard2.0 build has no DacFx-dependent code
+       (excluded via Compile Remove above), so no reference is needed. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.SqlServer.DacFx" Version="170.3.93"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- System.Text.Json is in-box for net10.0 but must be referenced for netstandard2.0 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Update="Microsoft.SqlServer.DacFx"
-                      ExcludeAssets="runtime;native" />
     <PackageReference Include="System.Text.Json" Version="10.0.3" PrivateAssets="all" />
   </ItemGroup>
 
@@ -134,6 +143,18 @@
       <BuiltProjectOutputGroupOutput Include="$(ProjectDepsFilePath)"
                                      TargetPath="$(ProjectDepsFileName)"
                                      FinalOutputPath="$(ProjectDepsFilePath)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Include runtimeconfig.json for net10.0 so dotnet exec can resolve the target framework.
+       Only net10.0 is an Exe; netstandard2.0 has no runtimeconfig. -->
+  <Target Name="AddRuntimeConfigToBuiltProjectOutputGroupOutput"
+          BeforeTargets="BuiltProjectOutputGroup"
+          Condition="'$(TargetFramework)' == 'net10.0'">
+    <ItemGroup>
+      <BuiltProjectOutputGroupOutput Include="$(ProjectRuntimeConfigFilePath)"
+                                     TargetPath="$(ProjectRuntimeConfigFileName)"
+                                     FinalOutputPath="$(ProjectRuntimeConfigFilePath)" />
     </ItemGroup>
   </Target>
 

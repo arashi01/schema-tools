@@ -29,7 +29,7 @@ SchemaTools operates in two distinct phases:
 
 ### Post-Build Phase (Dacpac -> Artifacts)
 
-6. **SchemaToolsExtractMetadata** - Extracts authoritative metadata from compiled `.dacpac` via DacFx/TSqlModel
+6. **SchemaToolsExtractMetadata** - Extracts authoritative metadata from compiled `.dacpac` via DacFx/TSqlModel. Under .NET Core MSBuild (`dotnet build`) this runs in-process; under Full Framework MSBuild (`msbuild.exe` / Visual Studio) it runs via `dotnet exec` for DacFx assembly isolation
 7. **SchemaToolsValidate** - Validates the compiled schema
 8. **SchemaToolsGenerateDocs** - Generates Markdown documentation
 
@@ -38,6 +38,18 @@ This design ensures:
 - Generated triggers are **semantically validated** by SqlBuild
 - FK relationships are **authoritatively resolved** from the compiled model
 - Validation and documentation reflect the **actual deployable schema**
+- DacFx extraction is **process-isolated** from SSDT when building under Full Framework MSBuild
+
+## Prerequisites
+
+| Requirement             | Version       | Purpose                                             |
+| ----------------------- | ------------- | --------------------------------------------------- |
+| **.NET 10 SDK**         | 10.0 or later | Required for post-build metadata extraction (DacFx) |
+| **Microsoft.Build.Sql** | 2.x           | SDK-style SQL project format                        |
+
+The .NET 10 SDK must be installed on the build machine. Pre-build tasks (analysis, trigger/procedure/view generation) and JSON-based post-build tasks (validation, documentation) run under any MSBuild runtime. Only the DacFx-dependent metadata extraction (Phase 6) requires .NET 10.
+
+When building with Full Framework MSBuild (Visual Studio / `msbuild.exe`), SchemaTools automatically shells out to `dotnet exec` for the metadata extraction step. This provides process-level isolation from SSDT's bundled DacFx assemblies, which would otherwise collide with SchemaTools' own DacFx reference in the shared AppDomain.
 
 ## Getting Started
 
@@ -86,11 +98,11 @@ Add to your `.sqlproj` to control build behaviour:
 
 Output strategy defaults by artifact:
 
-| Artifact        | Source Strategy               | Intermediate Strategy                     |
-| --------------- | ----------------------------- | ----------------------------------------- |
-| Generated SQL   | `Schema/_generated/`          | `$(IntermediateOutputPath)SchemaTools/`    |
-| Metadata JSON   | `Build/schema.json`           | `$(IntermediateOutputPath)schema.json`     |
-| Docs            | `Docs/SCHEMA.md`              | `$(OutputPath)SCHEMA.md`                  |
+| Artifact      | Source Strategy      | Intermediate Strategy                   |
+| ------------- | -------------------- | --------------------------------------- |
+| Generated SQL | `Schema/_generated/` | `$(IntermediateOutputPath)SchemaTools/` |
+| Metadata JSON | `Build/schema.json`  | `$(IntermediateOutputPath)schema.json`  |
+| Docs          | `Docs/SCHEMA.md`     | `$(OutputPath)SCHEMA.md`                |
 
 The `SchemaToolsGeneratedOutput` property controls the shared output directory. Triggers, procedures, and views all default to this directory but can be individually overridden:
 
@@ -209,7 +221,7 @@ The `softDeleteMode` setting controls trigger behaviour per table:
 
 | Mode       | Trigger Type         | behaviour                                                                         |
 | ---------- | -------------------- | --------------------------------------------------------------------------------- |
-| `cascade`  | Cascade soft-delete  | Automatically propagates `record_active=0` to all FK children (default)                  |
+| `cascade`  | Cascade soft-delete  | Automatically propagates `record_active=0` to all FK children (default)           |
 | `restrict` | Restrict soft-delete | Blocks soft-delete if any active children exist; requires explicit child handling |
 | `ignore`   | None                 | No triggers generated; table excluded from soft-delete trigger handling           |
 
@@ -255,12 +267,12 @@ END
 
 SchemaTools generates triggers based on the configured `softDeleteMode`:
 
-| Trigger                     | Target        | Mode                 | Purpose                                              |
-| --------------------------- | ------------- | -------------------- | ---------------------------------------------------- |
-| **Cascade soft-delete**     | Parent tables | `cascade`            | Propagates `record_active=0` to all FK children             |
-| **Restrict soft-delete**    | Parent tables | `restrict`           | Blocks `record_active=0` if any active children exist       |
-| **Reactivation guard**      | Child tables  | `cascade`/`restrict` | Blocks `record_active=0->1` if any parent is inactive       |
-| **Reactivation cascade**    | Parent tables | per-table opt-in     | Auto-reactivates children when parent is reactivated |
+| Trigger                  | Target        | Mode                 | Purpose                                               |
+| ------------------------ | ------------- | -------------------- | ----------------------------------------------------- |
+| **Cascade soft-delete**  | Parent tables | `cascade`            | Propagates `record_active=0` to all FK children       |
+| **Restrict soft-delete** | Parent tables | `restrict`           | Blocks `record_active=0` if any active children exist |
+| **Reactivation guard**   | Child tables  | `cascade`/`restrict` | Blocks `record_active=0->1` if any parent is inactive |
+| **Reactivation cascade** | Parent tables | per-table opt-in     | Auto-reactivates children when parent is reactivated  |
 
 ### Parent Tables (CASCADE Triggers)
 
@@ -349,7 +361,10 @@ For 1:1 relationships (e.g., `user` -> `user_profile`), you may want to auto-rea
 {
   "overrides": {
     "users": {
-      "features": { "reactivationCascade": true, "reactivationCascadeToleranceMs": 2000 }
+      "features": {
+        "reactivationCascade": true,
+        "reactivationCascadeToleranceMs": 2000
+      }
     }
   }
 }
@@ -440,45 +455,46 @@ The procedure:
 
 These properties are set in your `.sqlproj` file and control build integration.
 
-| Property                              | Default                                        | Description                                                          |
-| ------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------- |
-| `SchemaToolsEnabled`                  | `true`                                         | Master enable/disable for all SchemaTools functionality              |
-| `SchemaToolsOutputStrategy`           | `Source`                                       | `Source` (committed to VCS) or `Intermediate` (transient in obj/bin) |
-| `SchemaToolsGenerateTriggers`         | `true`                                         | Generate soft-delete triggers                                        |
-| `SchemaToolsGenerateViews`            | `true`                                         | Generate active-record views for soft-delete tables                  |
-| `SchemaToolsGenerateProcedures`       | `true`                                         | Generate purge stored procedure                                      |
-| `SchemaToolsValidate`                 | `true`                                         | Run schema validation post-build                                     |
-| `SchemaToolsGenerateDocs`             | `true`                                         | Generate Markdown documentation                                      |
-| `SchemaToolsExtractPostBuildMetadata` | `true`                                         | Extract metadata from compiled dacpac                                |
-| `SchemaToolsConfig`                   | `$(MSBuildProjectDirectory)\schema-tools.json` | Path to JSON configuration file                                      |
+| Property                              | Default                                        | Description                                                                                                              |
+| ------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `SchemaToolsEnabled`                  | `true`                                         | Master enable/disable for all SchemaTools functionality                                                                  |
+| `SchemaToolsOutputStrategy`           | `Source`                                       | `Source` (committed to VCS) or `Intermediate` (transient in obj/bin)                                                     |
+| `SchemaToolsGenerateTriggers`         | `true`                                         | Generate soft-delete triggers                                                                                            |
+| `SchemaToolsGenerateViews`            | `true`                                         | Generate active-record views for soft-delete tables                                                                      |
+| `SchemaToolsGenerateProcedures`       | `true`                                         | Generate purge stored procedure                                                                                          |
+| `SchemaToolsValidate`                 | `true`                                         | Run schema validation post-build                                                                                         |
+| `SchemaToolsGenerateDocs`             | `true`                                         | Generate Markdown documentation                                                                                          |
+| `SchemaToolsExtractPostBuildMetadata` | `true`                                         | Extract metadata from compiled dacpac                                                                                    |
+| `SchemaToolsConfig`                   | `$(MSBuildProjectDirectory)\schema-tools.json` | Path to JSON configuration file                                                                                          |
+| `SchemaToolsNet10Assembly`            | `$(tasks)\net10.0\SchemaTools.dll`             | Path to net10.0 assembly for `dotnet exec` invocation (Full Framework MSBuild only; override for source-tree references) |
 
 **Path overrides** (optional - defaults based on `SchemaToolsOutputStrategy`):
 
-| Property                      | Source Default               | Intermediate Default                       |
-| ----------------------------- | ---------------------------- | ------------------------------------------ |
-| `SchemaToolsGeneratedOutput`  | `Schema\_generated`          | `$(IntermediateOutputPath)SchemaTools`      |
-| `SchemaToolsTriggersOutput`   | `$(SchemaToolsGeneratedOutput)` | *(inherits from above)*                 |
-| `SchemaToolsViewsOutput`      | `$(SchemaToolsGeneratedOutput)` | *(inherits from above)*                 |
-| `SchemaToolsProceduresOutput` | `$(SchemaToolsGeneratedOutput)` | *(inherits from above)*                 |
-| `SchemaToolsMetadataOutput`   | `Build\schema.json`          | `$(IntermediateOutputPath)schema.json`      |
-| `SchemaToolsDocsOutput`       | `Docs\SCHEMA.md`             | `$(OutputPath)SCHEMA.md`                    |
+| Property                      | Source Default                  | Intermediate Default                   |
+| ----------------------------- | ------------------------------- | -------------------------------------- |
+| `SchemaToolsGeneratedOutput`  | `Schema\_generated`             | `$(IntermediateOutputPath)SchemaTools` |
+| `SchemaToolsTriggersOutput`   | `$(SchemaToolsGeneratedOutput)` | _(inherits from above)_                |
+| `SchemaToolsViewsOutput`      | `$(SchemaToolsGeneratedOutput)` | _(inherits from above)_                |
+| `SchemaToolsProceduresOutput` | `$(SchemaToolsGeneratedOutput)` | _(inherits from above)_                |
+| `SchemaToolsMetadataOutput`   | `Build\schema.json`             | `$(IntermediateOutputPath)schema.json` |
+| `SchemaToolsDocsOutput`       | `Docs\SCHEMA.md`                | `$(OutputPath)SCHEMA.md`               |
 
 ### Features (JSON)
 
-| Setting                      | Default     | Description                                                                                                        |
-| ---------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
-| `enableSoftDelete`           | `true`      | Detect soft-delete pattern (temporal + `record_active` column)                                                     |
-| `enableTemporalVersioning`   | `true`      | Detect and validate temporal tables                                                                                |
-| `detectPolymorphicPatterns`  | `true`      | Detect polymorphic relationships (`owner_type`/`owner_id`)                                                         |
-| `detectAppendOnlyTables`     | `true`      | Detect append-only tables (has `record_created_at`, no `record_updated_by`, non-temporal)                          |
-| `generateReactivationGuards` | `true`      | Generate reactivation guard triggers for child tables                                                              |
-| `reactivationCascade`        | `false`     | Auto-reactivate children when parent is reactivated (per-table via overrides)                                      |
-| `reactivationCascadeToleranceMs` | `2000`  | Timestamp tolerance in milliseconds for reactivation cascade matching                                              |
-| `softDeleteMode`             | `"cascade"` | Trigger behaviour: `cascade` (propagate to children), `restrict` (block if children exist), `ignore` (no triggers) |
+| Setting                          | Default     | Description                                                                                                        |
+| -------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| `enableSoftDelete`               | `true`      | Detect soft-delete pattern (temporal + `record_active` column)                                                     |
+| `enableTemporalVersioning`       | `true`      | Detect and validate temporal tables                                                                                |
+| `detectPolymorphicPatterns`      | `true`      | Detect polymorphic relationships (`owner_type`/`owner_id`)                                                         |
+| `detectAppendOnlyTables`         | `true`      | Detect append-only tables (has `record_created_at`, no `record_updated_by`, non-temporal)                          |
+| `generateReactivationGuards`     | `true`      | Generate reactivation guard triggers for child tables                                                              |
+| `reactivationCascade`            | `false`     | Auto-reactivate children when parent is reactivated (per-table via overrides)                                      |
+| `reactivationCascadeToleranceMs` | `2000`      | Timestamp tolerance in milliseconds for reactivation cascade matching                                              |
+| `softDeleteMode`                 | `"cascade"` | Trigger behaviour: `cascade` (propagate to children), `restrict` (block if children exist), `ignore` (no triggers) |
 
 ### Purge
 
-Settings for the centralized purge procedure that handles hard-deletion.
+Settings for the centralised purge procedure that handles hard-deletion.
 
 | Setting                  | Default                    | Description                                                    |
 | ------------------------ | -------------------------- | -------------------------------------------------------------- |
@@ -491,12 +507,12 @@ Settings for the centralized purge procedure that handles hard-deletion.
 
 Settings for auto-generated views that filter to active records, eliminating manual `WHERE record_active = 1` clauses.
 
-| Setting                    | Default                 | Description                                                                |
-| -------------------------- | ----------------------- | -------------------------------------------------------------------------- |
-| `enabled`                  | `true`                  | Generate views for soft-delete tables                                      |
-| `namingPattern`            | `"vw_{table}"`          | View name pattern (`{table}` replaced with table name)                     |
-| `includeDeletedViews`      | `false`                 | Also generate views for deleted records (`record_active = 0`)              |
-| `deletedViewNamingPattern` | `"vw_{table}_deleted"`  | Deleted view name pattern                                                  |
+| Setting                    | Default                | Description                                                   |
+| -------------------------- | ---------------------- | ------------------------------------------------------------- |
+| `enabled`                  | `true`                 | Generate views for soft-delete tables                         |
+| `namingPattern`            | `"vw_{table}"`         | View name pattern (`{table}` replaced with table name)        |
+| `includeDeletedViews`      | `false`                | Also generate views for deleted records (`record_active = 0`) |
+| `deletedViewNamingPattern` | `"vw_{table}_deleted"` | Deleted view name pattern                                     |
 
 **Explicit-wins policy**: If you define a view matching the naming pattern (e.g., `vw_users`), SchemaTools will not generate a conflicting view for that table.
 
@@ -513,14 +529,14 @@ GO
 
 ### Validation
 
-| Setting                    | Default | Description                                                           |
-| -------------------------- | ------- | --------------------------------------------------------------------- |
-| `validateForeignKeys`      | `true`  | Validate FK references exist across all tables                        |
-| `validatePolymorphic`      | `true`  | Validate polymorphic table structure and metadata                     |
+| Setting                    | Default | Description                                                                            |
+| -------------------------- | ------- | -------------------------------------------------------------------------------------- |
+| `validateForeignKeys`      | `true`  | Validate FK references exist across all tables                                         |
+| `validatePolymorphic`      | `true`  | Validate polymorphic table structure and metadata                                      |
 | `validateTemporal`         | `true`  | Validate temporal columns (`record_valid_from`/`record_valid_until`) and history table |
-| `validateAuditColumns`     | `true`  | Validate `record_created_by`/`record_updated_by` presence                           |
-| `enforceNamingConventions` | `true`  | Enforce `snake_case` naming for tables, columns, FKs, and PKs         |
-| `treatWarningsAsErrors`    | `false` | Treat validation warnings as build errors                             |
+| `validateAuditColumns`     | `true`  | Validate `record_created_by`/`record_updated_by` presence                              |
+| `enforceNamingConventions` | `true`  | Enforce `snake_case` naming for tables, columns, FKs, and PKs                          |
+| `treatWarningsAsErrors`    | `false` | Treat validation warnings as build errors                                              |
 
 The following validations always run: primary key presence, circular FK detection, soft-delete consistency, and unique constraint column validity.
 
@@ -538,19 +554,19 @@ The following validations always run: primary key presence, circular FK detectio
 
 Column names used for pattern detection. All comparisons are case-insensitive.
 
-| Setting                | Default              | Description                                                                                   |
-| ---------------------- | -------------------- | --------------------------------------------------------------------------------------------- |
-| `active`               | `"record_active"`       | Soft-delete flag column                                                                       |
-| `activeValue`          | `"1"`                   | SQL literal representing active state                                                         |
-| `inactiveValue`        | `"0"`                   | SQL literal representing inactive/soft-deleted state                                          |
-| `createdAt`            | `"record_created_at"`   | Append-only timestamp column                                                                  |
-| `createdBy`            | `"record_created_by"`   | Audit column: creator                                                                         |
-| `updatedBy`            | `"record_updated_by"`   | Audit column: last updater                                                                    |
-| `updatedByType`        | `"UNIQUEIDENTIFIER"`    | SQL data type for `updatedBy` column in triggers                                              |
-| `validFrom`            | `"record_valid_from"`   | Temporal period start column                                                                  |
-| `validTo`              | `"record_valid_until"`  | Temporal period end column                                                                    |
-| `auditForeignKeyTable` | `""`                 | Table that audit columns (`createdBy`/`updatedBy`) reference as FK. Empty = no FK validation. |
-| `polymorphicPatterns`  | `[]`                 | Array of type/ID column pairs for polymorphic detection                                       |
+| Setting                | Default                | Description                                                                                   |
+| ---------------------- | ---------------------- | --------------------------------------------------------------------------------------------- |
+| `active`               | `"record_active"`      | Soft-delete flag column                                                                       |
+| `activeValue`          | `"1"`                  | SQL literal representing active state                                                         |
+| `inactiveValue`        | `"0"`                  | SQL literal representing inactive/soft-deleted state                                          |
+| `createdAt`            | `"record_created_at"`  | Append-only timestamp column                                                                  |
+| `createdBy`            | `"record_created_by"`  | Audit column: creator                                                                         |
+| `updatedBy`            | `"record_updated_by"`  | Audit column: last updater                                                                    |
+| `updatedByType`        | `"UNIQUEIDENTIFIER"`   | SQL data type for `updatedBy` column in triggers                                              |
+| `validFrom`            | `"record_valid_from"`  | Temporal period start column                                                                  |
+| `validTo`              | `"record_valid_until"` | Temporal period end column                                                                    |
+| `auditForeignKeyTable` | `""`                   | Table that audit columns (`createdBy`/`updatedBy`) reference as FK. Empty = no FK validation. |
+| `polymorphicPatterns`  | `[]`                   | Array of type/ID column pairs for polymorphic detection                                       |
 
 To configure polymorphic patterns:
 
@@ -657,16 +673,16 @@ Detected when a non-temporal table has the configured `createdAt` column (defaul
 
 ### Default Paths
 
-| Property                      | Default                                                   | Description                       |
-| ----------------------------- | --------------------------------------------------------- | --------------------------------- |
-| `SchemaToolsConfig`           | `$(MSBuildProjectDirectory)\schema-tools.json`            | Configuration file                     |
-| `SchemaToolsAnalysisOutput`   | `$(IntermediateOutputPath)analysis.json`                  | Pre-build analysis (intermediate)      |
-| `SchemaToolsGeneratedOutput`  | `$(MSBuildProjectDirectory)\Schema\_generated`            | Shared output dir for generated SQL    |
-| `SchemaToolsMetadataOutput`   | `$(MSBuildProjectDirectory)\Build\schema.json`            | Post-build metadata from dacpac        |
-| `SchemaToolsDocsOutput`       | `$(MSBuildProjectDirectory)\Docs\SCHEMA.md`               | Generated documentation                |
-| `SchemaToolsTriggersOutput`   | `$(SchemaToolsGeneratedOutput)`                           | Generated triggers (overridable)       |
-| `SchemaToolsViewsOutput`      | `$(SchemaToolsGeneratedOutput)`                           | Generated views (overridable)          |
-| `SchemaToolsProceduresOutput` | `$(SchemaToolsGeneratedOutput)`                           | Generated procedures (overridable)     |
+| Property                      | Default                                        | Description                         |
+| ----------------------------- | ---------------------------------------------- | ----------------------------------- |
+| `SchemaToolsConfig`           | `$(MSBuildProjectDirectory)\schema-tools.json` | Configuration file                  |
+| `SchemaToolsAnalysisOutput`   | `$(IntermediateOutputPath)analysis.json`       | Pre-build analysis (intermediate)   |
+| `SchemaToolsGeneratedOutput`  | `$(MSBuildProjectDirectory)\Schema\_generated` | Shared output dir for generated SQL |
+| `SchemaToolsMetadataOutput`   | `$(MSBuildProjectDirectory)\Build\schema.json` | Post-build metadata from dacpac     |
+| `SchemaToolsDocsOutput`       | `$(MSBuildProjectDirectory)\Docs\SCHEMA.md`    | Generated documentation             |
+| `SchemaToolsTriggersOutput`   | `$(SchemaToolsGeneratedOutput)`                | Generated triggers (overridable)    |
+| `SchemaToolsViewsOutput`      | `$(SchemaToolsGeneratedOutput)`                | Generated views (overridable)       |
+| `SchemaToolsProceduresOutput` | `$(SchemaToolsGeneratedOutput)`                | Generated procedures (overridable)  |
 
 ### Feature Flags
 
@@ -871,4 +887,3 @@ MIT
 ## Contributing
 
 Issues and pull requests welcome at: https://github.com/arashi01/schema-tools
-
