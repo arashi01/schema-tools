@@ -19,7 +19,7 @@ namespace SchemaTools.Tasks;
 public class SchemaMetadataExtractor : MSTask
 {
   /// <summary>
-  /// Path to the compiled .dacpac file (typically $(TargetPath)).
+  /// Path to the compiled .dacpac file ($(SchemaToolsDacpacPath)).
   /// </summary>
   [Required]
   public string DacpacPath { get; set; } = string.Empty;

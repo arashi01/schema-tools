@@ -466,6 +466,7 @@ These properties are set in your `.sqlproj` file and control build integration.
 | `SchemaToolsGenerateDocs`             | `true`                                         | Generate Markdown documentation                                                                                          |
 | `SchemaToolsExtractPostBuildMetadata` | `true`                                         | Extract metadata from compiled dacpac                                                                                    |
 | `SchemaToolsConfig`                   | `$(MSBuildProjectDirectory)\schema-tools.json` | Path to JSON configuration file                                                                                          |
+| `SchemaToolsDacpacPath`               | `$(SqlTargetPath)`                             | Path to the compiled `.dacpac` file used for post-build metadata extraction                                              |
 | `SchemaToolsNet10Assembly`            | `$(tasks)\net10.0\SchemaTools.dll`             | Path to net10.0 assembly for `dotnet exec` invocation (Full Framework MSBuild only; override for source-tree references) |
 
 **Path overrides** (optional - defaults based on `SchemaToolsOutputStrategy`):
