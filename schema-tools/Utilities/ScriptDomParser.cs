@@ -4,9 +4,9 @@ namespace SchemaTools.Utilities;
 
 /// <summary>
 /// Parses T-SQL scripts via ScriptDom AST, replacing all hand-rolled string parsing.
-/// Used by <see cref="SchemaTools.Tasks.SchemaMetadataExtractor"/> to extract
-/// metadata from DacFx <c>GetScript()</c> output where property access fails
-/// due to SqlScriptProperty/InvalidCastException limitations.
+/// Used by the metadata extractor to extract metadata from DacFx
+/// <c>GetScript()</c> output where property access fails due to
+/// SqlScriptProperty/InvalidCastException limitations.
 /// </summary>
 /// <remarks>
 /// All methods are stateless and side-effect-free, making them trivially testable.
