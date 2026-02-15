@@ -1,0 +1,4 @@
+﻿<Project>
+  <!-- Required to override root Directory.Build.props: SQL projects do
+       not need .NET properties (LangVersion, Nullable, MinVer, etc.) -->
+</Project>

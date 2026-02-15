@@ -17,7 +17,7 @@ public class SchemaMetadata
   public DateTime GeneratedAt { get; set; }
 
   [JsonPropertyName("generatedBy")]
-  public string GeneratedBy { get; set; } = "SchemaMetadataGenerator";
+  public string GeneratedBy { get; set; } = "SchemaMetadataExtractor";
 
   [JsonPropertyName("database")]
   public string Database { get; set; } = "Database";

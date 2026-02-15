@@ -1,5 +1,5 @@
-﻿-- Description: Soft-delete table using custom column names
--- Category: custom
+﻿-- @description Soft-delete table using custom column names
+-- @category custom
 CREATE TABLE [test].[custom_columns_table] (
     [id] UNIQUEIDENTIFIER NOT NULL,
     [name] VARCHAR(200) NOT NULL,

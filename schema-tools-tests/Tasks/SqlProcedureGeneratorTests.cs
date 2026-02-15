@@ -1,4 +1,5 @@
-﻿using SchemaTools.Tasks;
+﻿using SchemaTools.Models;
+using SchemaTools.Tasks;
 
 namespace SchemaTools.Tests.Tasks;
 
@@ -88,7 +89,8 @@ public class SqlProcedureGeneratorTests : IDisposable
     files.Should().ContainSingle();
 
     string content = File.ReadAllText(files[0]);
-    content.Should().Contain("CREATE OR ALTER PROCEDURE [dbo].[usp_purge_soft_deleted]");
+    content.Should().Contain("CREATE PROCEDURE [dbo].[usp_purge_soft_deleted]");
+    content.Should().NotContain("CREATE OR ALTER PROCEDURE");
     content.Should().Contain("@grace_period_days INT = 90");
     content.Should().Contain("[dbo].[users]");
     content.Should().Contain("[dbo].[users_history]");

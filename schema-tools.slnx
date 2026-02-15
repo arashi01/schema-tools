@@ -14,6 +14,13 @@
     <Project Path="schema-tools-tests/SchemaTools.Tests.csproj" Id="317bac9e-dadf-411d-b2f2-d9bef0db76cf" />
   </Folder>  
 
+  <Folder Name="/schema-tools-example/">
+    <!-- SQL project excluded from VS build - use 'dotnet build' from CLI. -->
+    <Project Path="schema-tools-example/SchemaTools.Example.sqlproj" Id="06b9ae4c-fea9-4d02-8e12-8bcd9d2b6904">
+      <Platform Project="AnyCPU" />
+    </Project>
+  </Folder>
+
   <Folder Name="/.github/">
     <!-- CI/CD configuration visible in solution -->
   </Folder>  

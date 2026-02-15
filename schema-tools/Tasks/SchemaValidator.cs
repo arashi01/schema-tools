@@ -412,6 +412,12 @@ public class SchemaValidator : MSTask
   {
     foreach (TableMetadata table in metadata.Tables)
     {
+      // Skip temporal history tables - they do not have primary keys by design
+      if (table.IsHistoryTable)
+      {
+        continue;
+      }
+
       if (string.IsNullOrEmpty(table.PrimaryKey))
       {
         _errors.Add($"{table.Name}: Table has no primary key defined");
@@ -507,14 +513,9 @@ public class SchemaValidator : MSTask
         _errors.Add($"{table.Name}: Marked as HasSoftDelete but HasTemporalVersioning is false");
       }
 
-      // Active column should have default value of 1
-      string activeColumnName = table.ActiveColumnName ?? _config.Columns.Active;
-      ColumnMetadata? activeColumn = table.Columns.FirstOrDefault(c =>
-          string.Equals(c.Name, activeColumnName, StringComparison.OrdinalIgnoreCase));
-      if (activeColumn != null && activeColumn.DefaultValue != "1")
-      {
-        _warnings.Add($"{table.Name}.{activeColumnName}: Should have DEFAULT 1");
-      }
+      // Note: We intentionally do not validate DEFAULT constraints or their values.
+      // How downstream users handle active column defaults (explicit inserts, triggers,
+      // application logic, etc.) is an implementation choice, not a schema requirement.
     }
   }
 

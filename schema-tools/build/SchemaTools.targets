@@ -63,31 +63,31 @@
 
   <!-- =============================================================================
        TASK DEFINITIONS
+
+       Task assemblies live in tasks/{tfm}/ inside the NuGet package.
+       Dependencies are bundled alongside the task DLL.
        ============================================================================= -->
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaSourceAnalyser"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SqlTriggerGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SqlProcedureGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataExtractor"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaValidator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll" />
 
   <UsingTask TaskName="SchemaTools.Tasks.MarkdownDocumentationGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
-
-  <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SqlViewGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll" />
 
   <!-- =============================================================================
        PRE-BUILD TARGETS

@@ -37,7 +37,7 @@ public class SchemaSourceAnalyserTests : IDisposable
     TestConfig = config ?? new SchemaToolsConfig
     {
       DefaultSchema = "dbo",
-      SqlServerVersion = "Sql160",
+      SqlServerVersion = "Sql170",
       Features = new FeatureConfig { EnableSoftDelete = true }
     },
     BuildEngine = _buildEngine
@@ -531,7 +531,7 @@ CREATE TABLE [dbo].[meta]([id] UNIQUEIDENTIFIER PRIMARY KEY);
     SourceAnalysisResult? analysis = ReadAnalysisResult();
 
     analysis!.Version.Should().NotBeNullOrEmpty();
-    analysis.SqlServerVersion.Should().Be("Sql160");
+    analysis.SqlServerVersion.Should().Be("Sql170");
     analysis.DefaultSchema.Should().Be("dbo");
     analysis.AnalysedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
   }

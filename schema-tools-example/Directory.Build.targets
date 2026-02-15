@@ -1,0 +1,4 @@
+<Project>
+  <!-- Intentionally empty: prevents the root Directory.Build.targets (if any)
+       from being inherited by this SQL project. -->
+</Project>

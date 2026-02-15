@@ -379,7 +379,8 @@ public class MarkdownDocumentationGenerator : MSTask
       {
         string columns = string.Join(", ", fk.Columns);
         string refColumns = string.Join(", ", fk.ReferencedColumns);
-        markdown.AppendLine($"- `{fk.Name}`: ({columns}) -> {fk.ReferencedTable}({refColumns})");
+        string actions = FormatFkActions(fk.OnDelete, fk.OnUpdate);
+        markdown.AppendLine($"- `{fk.Name}`: ({columns}) -> {fk.ReferencedTable}({refColumns}){actions}");
       }
       markdown.AppendLine();
     }
@@ -432,5 +433,42 @@ public class MarkdownDocumentationGenerator : MSTask
     }
 
     markdown.AppendLine();
+  }
+
+  /// <summary>
+  /// Formats FK referential actions for documentation output.
+  /// Only includes non-default actions (NO ACTION is the SQL Server default).
+  /// </summary>
+  private static string FormatFkActions(string? onDelete, string? onUpdate)
+  {
+    var actions = new List<string>();
+
+    if (!string.IsNullOrEmpty(onDelete) &&
+        !string.Equals(onDelete, "NoAction", StringComparison.OrdinalIgnoreCase))
+    {
+      actions.Add($"ON DELETE {FormatAction(onDelete!)}");
+    }
+
+    if (!string.IsNullOrEmpty(onUpdate) &&
+        !string.Equals(onUpdate, "NoAction", StringComparison.OrdinalIgnoreCase))
+    {
+      actions.Add($"ON UPDATE {FormatAction(onUpdate!)}");
+    }
+
+    return actions.Count > 0 ? $" [{string.Join(", ", actions)}]" : "";
+  }
+
+  /// <summary>
+  /// Converts DacFx ForeignKeyAction enum names to SQL syntax.
+  /// </summary>
+  private static string FormatAction(string action)
+  {
+    return action switch
+    {
+      "Cascade" => "CASCADE",
+      "SetNull" => "SET NULL",
+      "SetDefault" => "SET DEFAULT",
+      _ => action.ToUpperInvariant()
+    };
   }
 }

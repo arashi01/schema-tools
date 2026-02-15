@@ -1,0 +1,66 @@
+{
+  "database": "SchemaToolsExample",
+  "defaultSchema": "dbo",
+  "sqlServerVersion": "Sql170",
+
+  "features": {
+    "enableSoftDelete": true,
+    "enableTemporalVersioning": true,
+    "softDeleteMode": "Cascade",
+    "generateReactivationGuards": true,
+    "detectPolymorphicPatterns": true,
+    "detectAppendOnlyTables": true,
+    "reactivationCascade": false,
+    "reactivationCascadeToleranceMs": 2000
+  },
+
+  "validation": {
+    "validateForeignKeys": true,
+    "validatePolymorphic": true,
+    "validateTemporal": true,
+    "validateAuditColumns": true,
+    "enforceNamingConventions": true,
+    "treatWarningsAsErrors": false
+  },
+
+  "documentation": {
+    "enabled": true,
+    "includeErDiagrams": true,
+    "includeStatistics": true,
+    "includeConstraints": true,
+    "includeIndexes": false
+  },
+
+  "purge": {
+    "enabled": true,
+    "defaultGracePeriodDays": 90,
+    "defaultBatchSize": 1000
+  },
+
+  "views": {
+    "enabled": true,
+    "namingPattern": "vw_{table}",
+    "includeDeletedViews": true,
+    "deletedViewNamingPattern": "vw_{table}_deleted"
+  },
+
+  "categories": {
+    "core": "Core identity and access management tables",
+    "commerce": "Order and payment processing tables",
+    "social": "User-generated content tables",
+    "audit": "Append-only audit and logging tables"
+  },
+
+  "overrides": {
+    "organisations": {
+      "features": {
+        "softDeleteMode": "Restrict"
+      }
+    },
+    "users": {
+      "features": {
+        "reactivationCascade": true
+      }
+    }
+  }
+}

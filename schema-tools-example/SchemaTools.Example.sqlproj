@@ -1,0 +1,23 @@
+﻿<Project>
+  <!-- Block inheritance of parent Directory.Build.props/targets. -->
+  <PropertyGroup>
+    <ImportDirectoryBuildProps>false</ImportDirectoryBuildProps>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+    <TargetDatabaseSet>True</TargetDatabaseSet>
+    <ProjectGuid>{06b9ae4c-fea9-4d02-8e12-8bcd9d2b6904}</ProjectGuid>
+  </PropertyGroup>
+  <!-- Microsoft.Build.Sql SDK 2.1.0: the current GA SDK-style SQL project format.
+       Released 2026-02-11. Requires .NET 8 or higher.
+       All .sql files in the project folder are automatically included in the build. -->
+  <Sdk Name="Microsoft.Build.Sql" Version="2.1.0" />
+  <PropertyGroup>
+    <!-- SQL Server 2025 (version 17.x) - current GA release -->
+    <DSP>Microsoft.Data.Tools.Schema.Sql.Sql170DatabaseSchemaProvider</DSP>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- SchemaTools MSBuild tasks: generates soft-delete triggers, reactivation
+         guards, purge procedures, active-record views, and documentation.
+         Version is resolved from the local NuGet feed (see nuget.config). -->
+    <PackageReference Include="SchemaTools" Version="*" />
+  </ItemGroup>
+</Project>

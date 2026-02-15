@@ -146,6 +146,13 @@ Create `schema-tools.json` in the project root. Contains schema semantics only (
     "includeIndexes": false
   },
 
+  "views": {
+    "enabled": true,
+    "namingPattern": "vw_{table}",
+    "includeDeletedViews": false,
+    "deletedViewNamingPattern": "vw_{table}_deleted"
+  },
+
   "categories": {
     "core": "Core entities",
     "reference": "Reference data"

@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
 using Microsoft.Build.Framework;
+using SchemaTools.Models;
 using MSTask = Microsoft.Build.Utilities.Task;
 
 namespace SchemaTools.Tasks;
@@ -231,7 +232,7 @@ public class SqlProcedureGenerator : MSTask
 -- DO NOT EDIT MANUALLY - regenerate with Force=true
 -- =============================================================================
 
-CREATE OR ALTER PROCEDURE [{ProcedureSchema}].[{PurgeProcedureName}]
+CREATE PROCEDURE [{ProcedureSchema}].[{PurgeProcedureName}]
     @grace_period_days INT = {DefaultGracePeriodDays},
     @batch_size INT = 1000,
     @dry_run BIT = 0

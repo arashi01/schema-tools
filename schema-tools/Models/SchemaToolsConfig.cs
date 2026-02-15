@@ -358,12 +358,6 @@ public class DocumentationConfig
   /// </summary>
   [JsonPropertyName("includeIndexes")]
   public bool IncludeIndexes { get; set; } = false;
-
-  /// <summary>
-  /// Output format
-  /// </summary>
-  [JsonPropertyName("format")]
-  public string Format { get; set; } = "markdown";
 }
 
 /// <summary>

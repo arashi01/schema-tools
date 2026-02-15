@@ -13,7 +13,6 @@
   <PropertyGroup>
     <!-- Package metadata -->
     <PackageId>SchemaTools</PackageId>
-
     <Product>SchemaTools</Product>
     <Description>MSBuild tasks for generating metadata, triggers, and documentation from SQL Server database schemas. Supports temporal tables, soft delete patterns, and polymorphic relationships.</Description>
     <PackageTags>sql-server;database;schema;msbuild;ssdt;temporal-tables;soft-delete;metadata;code-generation</PackageTags>
@@ -34,25 +33,65 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
+  <!-- ===========================================================================
+       MSBuild Task Packaging
+
+       MSBuild tasks must be packaged differently from regular libraries:
+       - DLLs go in tasks/ (not lib/) to avoid being treated as compile references
+       - All runtime dependencies must be bundled inside the package
+       - MSBuild assemblies are excluded (provided by the host at runtime)
+       - A deps.json helps MSBuild resolve the correct dependency versions
+
+       See: https://learn.microsoft.com/visualstudio/msbuild/tutorial-custom-task-code-generation
+       =========================================================================== -->
+  <PropertyGroup>
+    <!-- Pack task DLLs to tasks/{tfm}/ instead of lib/{tfm}/ -->
+    <BuildOutputTargetFolder>tasks</BuildOutputTargetFolder>
+
+    <!-- Copy NuGet dependency assemblies to output directory for bundling -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+    <!-- Generate deps.json for MSBuild dependency resolution -->
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+
+    <!-- Suppress NuGet warnings:
+         NU5100 - assemblies in tasks/ folder (intentional for MSBuild tasks)
+         NU5128 - no lib/ or ref/ assemblies (we are a task package, not a library) -->
+    <NoWarn>$(NoWarn);NU5100;NU5128</NoWarn>
+
+    <!-- Do not expose bundled dependencies as NuGet package dependencies -->
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+
+    <!-- Hook into packaging to bundle runtime dependencies alongside the task DLL -->
+    <TargetsForTfmSpecificBuildOutput>
+      $(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage
+    </TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
 
   <ItemGroup>
-    <!-- MSBuild dependencies (reference assemblies only; MSBuild provides the runtime assembly) -->
-    <PackageReference Include="Microsoft.Build.Framework" Version="18.0.2" />
-    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.0.2" />
+    <!-- MSBuild dependencies: provided by the MSBuild host at runtime.
+         PrivateAssets="all"    - do not expose as package dependencies
+         ExcludeAssets="Runtime" - do not copy to output (MSBuild provides these) -->
+    <PackageReference Include="Microsoft.Build.Framework" Version="18.0.2"
+                      PrivateAssets="all" ExcludeAssets="Runtime" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.0.2"
+                      PrivateAssets="all" ExcludeAssets="Runtime" />
 
-    <!-- SQL Server ScriptDom for parsing T-SQL -->
-    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0" />
+    <!-- SQL Server ScriptDom for parsing T-SQL (bundled in package) -->
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0"
+                      PrivateAssets="all" />
 
-    <!-- DacFx for semantic model extraction from .dacpac (post-build) -->
-    <PackageReference Include="Microsoft.SqlServer.DacFx" Version="170.3.93" />
+    <!-- DacFx for semantic model extraction from .dacpac (bundled in package) -->
+    <PackageReference Include="Microsoft.SqlServer.DacFx" Version="170.3.93"
+                      PrivateAssets="all" />
 
     <!-- Source link for debugging -->
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="all" />
   </ItemGroup>
 
   <!-- System.Text.Json is in-box for net10.0 but must be referenced for netstandard2.0 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="System.Text.Json" Version="9.0.5" />
+    <PackageReference Include="System.Text.Json" Version="9.0.5" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -63,5 +102,25 @@
     <!-- Include README -->
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
+
+  <!-- Bundle all runtime dependency assemblies into the NuGet package
+       alongside the task DLL in tasks/{tfm}/ -->
+  <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths)"
+                            TargetPath="%(ReferenceCopyLocalPaths.DestinationSubPath)" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Include the generated deps.json in the package output -->
+  <Target Name="AddBuildDependencyFileToBuiltProjectOutputGroupOutput"
+          BeforeTargets="BuiltProjectOutputGroup"
+          Condition="'$(GenerateDependencyFile)' == 'true'">
+    <ItemGroup>
+      <BuiltProjectOutputGroupOutput Include="$(ProjectDepsFilePath)"
+                                     TargetPath="$(ProjectDepsFileName)"
+                                     FinalOutputPath="$(ProjectDepsFilePath)" />
+    </ItemGroup>
+  </Target>
 
 </Project>
