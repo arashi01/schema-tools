@@ -1,4 +1,4 @@
-﻿name: Integration Build
+name: Integration Build
 
 on:
   push:
