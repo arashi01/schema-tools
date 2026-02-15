@@ -149,9 +149,15 @@ public class SqlProcedureGenerator : MSTask
 
       visiting.Add(table.Name);
 
-      // Visit all children first (they must be deleted before parent)
+      // Visit all children first (they must be deleted before parent).
+      // Self-referencing FKs (e.g. parent_group_id -> groups.id) are skipped:
+      // they do not affect deletion ordering because a single DELETE statement
+      // handles both parent and child rows atomically.
       foreach (string childName in table.ChildTables)
       {
+        if (string.Equals(childName, table.Name, StringComparison.OrdinalIgnoreCase))
+          continue;
+
         if (tableLookup.TryGetValue(childName, out TableAnalysis? child))
         {
           Visit(child);

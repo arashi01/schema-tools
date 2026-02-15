@@ -190,6 +190,39 @@ public class SqlProcedureGeneratorTests : IDisposable
     _buildEngine.Warnings.Should().Contain(w => w.Contains("Circular dependency"));
   }
 
+  [Fact]
+  public void Execute_SelfReferencingForeignKey_DoesNotWarnCircularDependency()
+  {
+    var analysis = new SourceAnalysisResult
+    {
+      Tables =
+      [
+        new TableAnalysis
+        {
+          Name = "groups",
+          Schema = "dbo",
+          HasSoftDelete = true,
+          ActiveColumnName = "record_active",
+          HasTemporalVersioning = true,
+          HistoryTable = "[dbo].[groups_history]",
+          ValidToColumn = "record_valid_until",
+          PrimaryKeyColumns = ["id"],
+          ChildTables = ["groups"]  // Self-referencing FK (parent_group_id -> id)
+        }
+      ]
+    };
+
+    SqlProcedureGenerator generator = CreateGenerator(analysis);
+    bool result = generator.Execute();
+
+    result.Should().BeTrue();
+    _buildEngine.Warnings.Should().NotContain(w => w.Contains("Circular dependency"),
+      "self-referencing FKs are not circular dependencies for deletion ordering");
+
+    string content = File.ReadAllText(Path.Combine(_tempDir, "usp_purge_soft_deleted.sql"));
+    content.Should().Contain("[dbo].[groups]", "table should still be included in purge procedure");
+  }
+
   // --- Tables without history table -----------------------------------------
 
   [Fact]
