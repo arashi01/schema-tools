@@ -852,6 +852,41 @@ GO
     parent.ChildTables.Should().ContainSingle("orders",
       "a child with multiple FKs to the same parent should appear only once");
   }
+
+  [Fact]
+  public void Execute_SelfReferencingForeignKey_AppearsInChildTables()
+  {
+    CreateTableFile("groups.sql", @"
+CREATE TABLE [dbo].[groups]
+(
+    [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+    [parent_group_id] UNIQUEIDENTIFIER NULL,
+    [name] NVARCHAR(200) NOT NULL,
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_created_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_updated_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until]),
+    CONSTRAINT [fk_groups_parent] FOREIGN KEY ([parent_group_id]) REFERENCES [dbo].[groups] ([id])
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[groups_history]));
+GO
+");
+
+    SchemaSourceAnalyser analyser = CreateAnalyser();
+    bool result = analyser.Execute();
+
+    result.Should().BeTrue();
+
+    SourceAnalysisResult? analysis = ReadAnalysisResult();
+    analysis.Should().NotBeNull();
+
+    TableAnalysis table = analysis!.Tables.Single(t => t.Name == "groups");
+    table.ChildTables.Should().ContainSingle("groups",
+      "self-referencing FK should list the table as its own child exactly once");
+    table.IsLeafTable.Should().BeFalse("a self-referencing table has children");
+  }
 }
 
 

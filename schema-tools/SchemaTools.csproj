@@ -81,7 +81,13 @@
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0"
                       PrivateAssets="all" />
 
-    <!-- DacFx for semantic model extraction from .dacpac (bundled in package) -->
+    <!-- DacFx for semantic model extraction from .dacpac.
+         For net10.0 (.NET Core MSBuild / dotnet build): bundled in package.
+         For netstandard2.0 (Full Framework MSBuild): compile-only reference.
+         In Full Framework MSBuild, SSDT loads its own DacFx into the AppDomain
+         with the same assembly identity (Version=170.0.0.0, same PublicKeyToken).
+         Bundling a second copy causes native/managed version mismatches and
+         "Could not load schema model" errors. SSDT provides DacFx at runtime. -->
     <PackageReference Include="Microsoft.SqlServer.DacFx" Version="170.3.93"
                       PrivateAssets="all" />
 
@@ -89,8 +95,16 @@
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- System.Text.Json is in-box for net10.0 but must be referenced for netstandard2.0 -->
+  <!-- For netstandard2.0 (Full Framework MSBuild), DacFx is compile-only.
+       SSDT provides DacFx at runtime with the same assembly identity
+       (Version=170.0.0.0, PublicKeyToken=89845dcd8080cc91).
+       Bundling a second copy causes native/managed version mismatches.
+       ExcludeAssets="runtime;native" is the .NET equivalent of Maven's
+       "provided" scope: compile against the API but do not bundle it
+       or any of its transitive dependencies. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Update="Microsoft.SqlServer.DacFx"
+                      ExcludeAssets="runtime;native" />
     <PackageReference Include="System.Text.Json" Version="10.0.3" PrivateAssets="all" />
   </ItemGroup>
 
