@@ -63,6 +63,13 @@
     <SchemaToolsAnalysisOutput Condition="'$(SchemaToolsAnalysisOutput)' == ''">$(IntermediateOutputPath)analysis.json</SchemaToolsAnalysisOutput>
   </PropertyGroup>
 
+  <!-- Dacpac path: both SSDT (SqlTasks.targets) and Microsoft.Build.Sql SDK define
+       $(SqlTargetPath) as the canonical path to the compiled .dacpac file.
+       $(TargetPath) is NOT usable here because SSDT resolves it to the output DLL.
+       Evaluated inside the target because $(SqlTargetPath) is set by SDK targets,
+       not available at import time. Consumers may override SchemaToolsDacpacPath
+       in a static PropertyGroup if their project sets SqlTargetPath early. -->
+
   <!-- =============================================================================
        TASK DEFINITIONS
 
@@ -202,15 +209,20 @@
           Condition="'$(SchemaToolsEnabled)' == 'true' AND '$(SchemaToolsExtractPostBuildMetadata)' == 'true'">
     <Message Text="SchemaTools: Extracting metadata from dacpac..." Importance="high" />
 
+    <!-- Resolve the dacpac path at execution time (SqlTargetPath is set by SDK targets). -->
+    <PropertyGroup>
+      <SchemaToolsDacpacPath Condition="'$(SchemaToolsDacpacPath)' == ''">$(SqlTargetPath)</SchemaToolsDacpacPath>
+    </PropertyGroup>
+
     <!-- .NET Core MSBuild: in-process -->
     <SchemaTools.Tasks.SchemaMetadataExtractor
-      DacpacPath="$(TargetPath)"
+      DacpacPath="$(SchemaToolsDacpacPath)"
       OutputFile="$(SchemaToolsMetadataOutput)"
       ConfigFile="$(SchemaToolsConfig)"
       Condition="'$(MSBuildRuntimeType)' == 'Core'" />
 
     <!-- Full Framework MSBuild: dotnet exec -->
-    <Exec Command="&quot;$(_SchemaToolsDotnet)&quot; exec &quot;$(SchemaToolsNet10Assembly)&quot; extract-metadata --dacpac &quot;$(TargetPath)&quot; --output &quot;$(SchemaToolsMetadataOutput)&quot; --config &quot;$(SchemaToolsConfig)&quot;"
+    <Exec Command="&quot;$(_SchemaToolsDotnet)&quot; exec &quot;$(SchemaToolsNet10Assembly)&quot; extract-metadata --dacpac &quot;$(SchemaToolsDacpacPath)&quot; --output &quot;$(SchemaToolsMetadataOutput)&quot; --config &quot;$(SchemaToolsConfig)&quot;"
           Condition="'$(MSBuildRuntimeType)' != 'Core'" />
   </Target>
 
