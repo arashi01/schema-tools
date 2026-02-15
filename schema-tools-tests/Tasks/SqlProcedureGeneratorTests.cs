@@ -481,4 +481,101 @@ public class SqlProcedureGeneratorTests : IDisposable
     // Second table (parent) should have TOP (@batch_size), first (child) should not
     content.Should().Contain("DELETE TOP (@batch_size)");
   }
+
+  // --- Non-id primary key ---------------------------------------------------
+
+  [Fact]
+  public void Execute_NonIdPrimaryKey_GeneratesCorrectColumnReferences()
+  {
+    var analysis = new SourceAnalysisResult
+    {
+      Tables =
+      [
+        new TableAnalysis
+        {
+          Name = "countries",
+          Schema = "directory",
+          HasSoftDelete = true,
+          ActiveColumnName = "record_active",
+          HistoryTable = "[directory].[hist_countries]",
+          HasTemporalVersioning = true,
+          ValidToColumn = "record_valid_until",
+          PrimaryKeyColumns = ["iso_alpha2"]
+        }
+      ]
+    };
+
+    SqlProcedureGenerator generator = CreateGenerator(analysis);
+    generator.Execute();
+
+    string content = File.ReadAllText(Path.Combine(_tempDir, "usp_purge_soft_deleted.sql"));
+    content.Should().Contain("t.iso_alpha2 = h.iso_alpha2");
+    content.Should().Contain("COUNT(DISTINCT t.iso_alpha2)");
+    content.Should().NotContain("t.id");
+  }
+
+  // --- Composite PK uses COUNT(*) -------------------------------------------
+
+  [Fact]
+  public void Execute_CompositePrimaryKey_UsesCountStar()
+  {
+    var analysis = new SourceAnalysisResult
+    {
+      Tables =
+      [
+        new TableAnalysis
+        {
+          Name = "dialling_codes",
+          Schema = "directory",
+          HasSoftDelete = true,
+          ActiveColumnName = "record_active",
+          HistoryTable = "[directory].[hist_dialling_codes]",
+          HasTemporalVersioning = true,
+          ValidToColumn = "record_valid_until",
+          PrimaryKeyColumns = ["country_code", "dialling_code"]
+        }
+      ]
+    };
+
+    SqlProcedureGenerator generator = CreateGenerator(analysis);
+    generator.Execute();
+
+    string content = File.ReadAllText(Path.Combine(_tempDir, "usp_purge_soft_deleted.sql"));
+    content.Should().Contain("t.country_code = h.country_code AND t.dialling_code = h.dialling_code");
+    content.Should().Contain("COUNT(*)");
+    content.Should().NotContain("COUNT(DISTINCT");
+  }
+
+  // --- Missing PK columns skips table with warning --------------------------
+
+  [Fact]
+  public void Execute_MissingPrimaryKey_SkipsTableWithWarning()
+  {
+    var analysis = new SourceAnalysisResult
+    {
+      Tables =
+      [
+        new TableAnalysis
+        {
+          Name = "no_pk_table",
+          Schema = "dbo",
+          HasSoftDelete = true,
+          ActiveColumnName = "record_active",
+          HistoryTable = "[dbo].[no_pk_history]",
+          HasTemporalVersioning = true,
+          ValidToColumn = "record_valid_until",
+          PrimaryKeyColumns = []  // No PK columns
+        }
+      ]
+    };
+
+    SqlProcedureGenerator generator = CreateGenerator(analysis);
+    bool result = generator.Execute();
+
+    result.Should().BeTrue();
+
+    string content = File.ReadAllText(Path.Combine(_tempDir, "usp_purge_soft_deleted.sql"));
+    content.Should().NotContain("[dbo].[no_pk_table]");
+    _buildEngine.Warnings.Should().Contain(w => w.Contains("no_pk_table") && w.Contains("no primary key"));
+  }
 }

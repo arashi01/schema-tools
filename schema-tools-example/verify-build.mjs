@@ -22,15 +22,18 @@ function assert(condition, message) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Generated SQL files — single _generated directory
+// 1. Generated SQL files - single _generated directory
 // ---------------------------------------------------------------------------
 console.log("\n--- Generated SQL ---");
 
 const generatedDir = join(root, "Schema", "_generated");
+const analysisPath = join(root, "analysis.json");
 assert(existsSync(generatedDir), "Schema/_generated/ directory exists");
 
 const expectedFiles = [
-  // Triggers (9)
+  // Triggers (12)
+  "trg_countries_cascade_soft_delete.sql",
+  "trg_country_dialling_codes_reactivation_guard.sql",
   "trg_orders_cascade_soft_delete.sql",
   "trg_orders_reactivation_guard.sql",
   "trg_order_items_reactivation_guard.sql",
@@ -42,8 +45,10 @@ const expectedFiles = [
   "trg_user_profiles_reactivation_guard.sql",
   // Procedure (1)
   "usp_purge_soft_deleted.sql",
-  // Views (7)
+  // Views (9)
   "vw_comments.sql",
+  "vw_countries.sql",
+  "vw_country_dialling_codes.sql",
   "vw_orders.sql",
   "vw_order_items.sql",
   "vw_organisations.sql",
@@ -64,7 +69,7 @@ if (existsSync(generatedDir)) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Column naming — generated SQL should use record_ prefixed columns
+// 2. Column naming - generated SQL should use record_ prefixed columns
 // ---------------------------------------------------------------------------
 console.log("\n--- Column Naming ---");
 
@@ -82,7 +87,7 @@ if (existsSync(triggerFile)) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Post-build metadata — Build/schema.json
+// 3. Post-build metadata - Build/schema.json
 // ---------------------------------------------------------------------------
 console.log("\n--- Post-Build Metadata ---");
 
@@ -99,7 +104,7 @@ if (existsSync(metadataPath)) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Documentation — Docs/SCHEMA.md
+// 4. Documentation - Docs/SCHEMA.md
 // ---------------------------------------------------------------------------
 console.log("\n--- Documentation ---");
 
@@ -113,7 +118,104 @@ if (existsSync(docsPath)) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Stale directories should not exist
+// 5. Primary Key correctness - non-id and composite PK tables
+// ---------------------------------------------------------------------------
+console.log("\n--- PK Correctness (ALTER TABLE constraints) ---");
+
+// 5a. Purge procedure must reference iso_alpha2 for countries, not id
+const purgeFile = join(generatedDir, "usp_purge_soft_deleted.sql");
+if (existsSync(purgeFile)) {
+  const purge = readFileSync(purgeFile, "utf8");
+
+  // countries uses iso_alpha2 PK
+  assert(
+    purge.includes("t.iso_alpha2 = h.iso_alpha2"),
+    "Purge proc joins countries on iso_alpha2 (not id)"
+  );
+  assert(
+    !purge.match(/\bcountries\b[\s\S]{0,200}\bt\.id\b/),
+    "Purge proc does NOT reference t.id for countries"
+  );
+
+  // country_dialling_codes uses composite PK
+  assert(
+    purge.includes("t.country_code = h.country_code")
+      && purge.includes("t.dialling_code = h.dialling_code"),
+    "Purge proc joins country_dialling_codes on composite PK"
+  );
+}
+
+// 5b. Cascade trigger for countries must use iso_alpha2 in PK join
+const countriesTrigger = join(
+  generatedDir,
+  "trg_countries_cascade_soft_delete.sql"
+);
+if (existsSync(countriesTrigger)) {
+  const content = readFileSync(countriesTrigger, "utf8");
+  assert(
+    content.includes("i.iso_alpha2 = d.iso_alpha2"),
+    "Countries cascade trigger joins on iso_alpha2"
+  );
+  assert(
+    !content.includes("i.id = d.id"),
+    "Countries cascade trigger does NOT use id"
+  );
+}
+
+// 5c. Reactivation guard for country_dialling_codes must use composite PK
+const diallingGuard = join(
+  generatedDir,
+  "trg_country_dialling_codes_reactivation_guard.sql"
+);
+if (existsSync(diallingGuard)) {
+  const content = readFileSync(diallingGuard, "utf8");
+  assert(
+    content.includes("i.country_code = d.country_code")
+      && content.includes("i.dialling_code = d.dialling_code"),
+    "Dialling codes guard trigger joins on composite PK"
+  );
+  assert(
+    !content.includes("i.id = d.id"),
+    "Dialling codes guard trigger does NOT use id"
+  );
+}
+
+// 5d. analysis.json should have correct PKs for the new tables
+if (existsSync(analysisPath)) {
+  const raw = readFileSync(analysisPath, "utf8").replace(/^\uFEFF/, "");
+  const analysis = JSON.parse(raw);
+  const countriesEntry = analysis.tables.find((t) => t.name === "countries");
+  const diallingEntry = analysis.tables.find(
+    (t) => t.name === "country_dialling_codes"
+  );
+
+  assert(
+    countriesEntry != null,
+    "analysis.json contains countries table"
+  );
+  if (countriesEntry) {
+    assert(
+      JSON.stringify(countriesEntry.primaryKeyColumns) ===
+        JSON.stringify(["iso_alpha2"]),
+      `countries PK = [iso_alpha2] (got ${JSON.stringify(countriesEntry.primaryKeyColumns)})`
+    );
+  }
+
+  assert(
+    diallingEntry != null,
+    "analysis.json contains country_dialling_codes table"
+  );
+  if (diallingEntry) {
+    assert(
+      JSON.stringify(diallingEntry.primaryKeyColumns) ===
+        JSON.stringify(["country_code", "dialling_code"]),
+      `country_dialling_codes PK = [country_code, dialling_code] (got ${JSON.stringify(diallingEntry.primaryKeyColumns)})`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 6. Stale directories should not exist
 // ---------------------------------------------------------------------------
 console.log("\n--- No Stale Directories ---");
 

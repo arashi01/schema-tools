@@ -248,11 +248,17 @@ BEGIN
       string activeColumn = table.ActiveColumnName ?? "active";
       string validToColumn = table.ValidToColumn ?? "valid_to";
 
-      // Build PK column list for JOIN
-      List<string> pkColumns = table.PrimaryKeyColumns.Count > 0
-        ? table.PrimaryKeyColumns
-        : new List<string> { "id" };
+      // Build PK column list for JOIN - require explicit PK columns, no fallback
+      List<string> pkColumns = table.PrimaryKeyColumns;
+      if (pkColumns.Count == 0)
+      {
+        Log.LogWarning($"Table '{table.Name}' has no primary key columns detected - skipping purge generation for this table");
+        continue;
+      }
       string pkJoinConditions = string.Join(" AND ", pkColumns.Select(pk => $"t.{pk} = h.{pk}"));
+      string countExpression = pkColumns.Count == 1
+        ? $"COUNT(DISTINCT t.{pkColumns[0]})"
+        : "COUNT(*)";  // COUNT(*) is correct for multi-column PK with EXISTS filter
 
       // Check if we have history table info for proper grace period checking
       bool hasHistoryTable = !string.IsNullOrEmpty(table.HistoryTable) && table.HasTemporalVersioning;
@@ -267,7 +273,7 @@ BEGIN
         sb.AppendLine($@"        IF @dry_run = 1
         BEGIN
             -- Count records eligible for purge (soft-deleted before cutoff)
-            SELECT @deleted_count = COUNT(DISTINCT t.{pkColumns[0]})
+            SELECT @deleted_count = {countExpression}
             FROM [{schema}].[{table.Name}] t
             WHERE t.{activeColumn} = 0
             AND EXISTS (
