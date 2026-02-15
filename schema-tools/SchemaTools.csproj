@@ -91,7 +91,7 @@
 
   <!-- System.Text.Json is in-box for net10.0 but must be referenced for netstandard2.0 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="System.Text.Json" Version="9.0.5" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="10.0.3" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
