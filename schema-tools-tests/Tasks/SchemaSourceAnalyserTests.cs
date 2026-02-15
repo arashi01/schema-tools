@@ -659,6 +659,148 @@ CREATE TABLE [dbo].[child]
       .Which.OnDelete.Should().Be("NoAction",
         "FKs without explicit action should normalise to NoAction, not NotSpecified");
   }
+
+  // --- ALTER TABLE constraint extraction ------------------------------------
+
+  [Fact]
+  public void Execute_AlterTablePrimaryKey_ExtractsPkColumns()
+  {
+    CreateTableFile("countries.sql", @"
+CREATE TABLE [dbo].[countries]
+(
+    [iso_alpha2] CHAR(2) NOT NULL,
+    [name] NVARCHAR(200) NOT NULL,
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_created_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_updated_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[hist_countries]));
+GO
+
+ALTER TABLE [dbo].[countries]
+    ADD CONSTRAINT [pk_countries]
+    PRIMARY KEY CLUSTERED ([iso_alpha2] ASC);
+GO
+");
+
+    SchemaSourceAnalyser analyser = CreateAnalyser();
+    bool result = analyser.Execute();
+
+    result.Should().BeTrue();
+
+    SourceAnalysisResult? analysis = ReadAnalysisResult();
+    analysis.Should().NotBeNull();
+    TableAnalysis table = analysis!.Tables.Single(t => t.Name == "countries");
+    table.PrimaryKeyColumns.Should().BeEquivalentTo(new[] { "iso_alpha2" });
+  }
+
+  [Fact]
+  public void Execute_AlterTableCompositePrimaryKey_ExtractsAllPkColumns()
+  {
+    CreateTableFile("country_dialling_codes.sql", @"
+CREATE TABLE [dbo].[country_dialling_codes]
+(
+    [country_code] CHAR(2) NOT NULL,
+    [dialling_code] VARCHAR(10) NOT NULL,
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_created_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_updated_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[hist_country_dialling_codes]));
+GO
+
+ALTER TABLE [dbo].[country_dialling_codes]
+    ADD CONSTRAINT [pk_country_dialling_codes]
+    PRIMARY KEY CLUSTERED ([country_code] ASC, [dialling_code] ASC);
+GO
+");
+
+    SchemaSourceAnalyser analyser = CreateAnalyser();
+    bool result = analyser.Execute();
+
+    result.Should().BeTrue();
+
+    SourceAnalysisResult? analysis = ReadAnalysisResult();
+    analysis.Should().NotBeNull();
+    TableAnalysis table = analysis!.Tables.Single(t => t.Name == "country_dialling_codes");
+    table.PrimaryKeyColumns.Should().BeEquivalentTo(new[] { "country_code", "dialling_code" });
+  }
+
+  [Fact]
+  public void Execute_AlterTableForeignKey_ExtractsFkReferences()
+  {
+    CreateTableFile("countries.sql", @"
+CREATE TABLE [dbo].[countries]
+(
+    [iso_alpha2] CHAR(2) NOT NULL,
+    [name] NVARCHAR(200) NOT NULL,
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_created_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_updated_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[hist_countries]));
+GO
+
+ALTER TABLE [dbo].[countries]
+    ADD CONSTRAINT [pk_countries]
+    PRIMARY KEY CLUSTERED ([iso_alpha2] ASC);
+GO
+");
+
+    CreateTableFile("dialling_codes.sql", @"
+CREATE TABLE [dbo].[dialling_codes]
+(
+    [country_code] CHAR(2) NOT NULL,
+    [dialling_code] VARCHAR(10) NOT NULL,
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_created_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_updated_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[hist_dialling_codes]));
+GO
+
+ALTER TABLE [dbo].[dialling_codes]
+    ADD CONSTRAINT [pk_dialling_codes]
+    PRIMARY KEY CLUSTERED ([country_code] ASC, [dialling_code] ASC);
+GO
+
+ALTER TABLE [dbo].[dialling_codes]
+    ADD CONSTRAINT [fk_dialling_codes_countries]
+    FOREIGN KEY ([country_code])
+    REFERENCES [dbo].[countries] ([iso_alpha2]);
+GO
+");
+
+    SchemaSourceAnalyser analyser = CreateAnalyser();
+    bool result = analyser.Execute();
+
+    result.Should().BeTrue();
+
+    SourceAnalysisResult? analysis = ReadAnalysisResult();
+    analysis.Should().NotBeNull();
+
+    TableAnalysis child = analysis!.Tables.Single(t => t.Name == "dialling_codes");
+    child.ForeignKeyReferences.Should().ContainSingle();
+    child.ForeignKeyReferences[0].ReferencedTable.Should().Be("countries");
+    child.ForeignKeyReferences[0].Columns.Should().BeEquivalentTo(new[] { "country_code" });
+    child.ForeignKeyReferences[0].ReferencedColumns.Should().BeEquivalentTo(new[] { "iso_alpha2" });
+
+    // Parent should have child listed
+    TableAnalysis parent = analysis.Tables.Single(t => t.Name == "countries");
+    parent.ChildTables.Should().Contain("dialling_codes");
+  }
 }
 
 

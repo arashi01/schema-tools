@@ -954,6 +954,99 @@ public class SqlTriggerGeneratorTests : IDisposable
     content.Should().Contain("500ms");
   }
 
+  // --- Non-id PK in cascade trigger ----------------------------------------
+
+  [Fact]
+  public void Execute_NonIdPrimaryKey_GeneratesCorrectJoinsInCascadeTrigger()
+  {
+    // Arrange: countries with iso_alpha2 PK, child country_dialling_codes
+    TableAnalysis parent = new()
+    {
+      Name = "countries",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasActiveColumn = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "record_active",
+      PrimaryKeyColumns = ["iso_alpha2"],
+      ChildTables = ["country_dialling_codes"],
+      IsLeafTable = false
+    };
+    TableAnalysis child = new()
+    {
+      Name = "country_dialling_codes",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasActiveColumn = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "record_active",
+      PrimaryKeyColumns = ["country_code", "dialling_code"],
+      ChildTables = [],
+      IsLeafTable = true,
+      ForeignKeyReferences =
+      [
+        new ForeignKeyRef
+        {
+          ReferencedTable = "countries",
+          ReferencedSchema = "test",
+          Columns = ["country_code"],
+          ReferencedColumns = ["iso_alpha2"]
+        }
+      ]
+    };
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    task.Execute().Should().BeTrue();
+
+    // Assert: cascade trigger uses iso_alpha2, not id
+    string cascadeFile = Path.Combine(_outputDir, "trg_countries_cascade_soft_delete.sql");
+    File.Exists(cascadeFile).Should().BeTrue();
+    string cascadeContent = File.ReadAllText(cascadeFile);
+    cascadeContent.Should().Contain("i.iso_alpha2 = d.iso_alpha2");
+    cascadeContent.Should().NotContain("i.id = d.id");
+    cascadeContent.Should().Contain("country_code");
+
+    // Assert: reactivation guard also uses composite PK, not id
+    string guardFile = Path.Combine(_outputDir, "trg_country_dialling_codes_reactivation_guard.sql");
+    File.Exists(guardFile).Should().BeTrue();
+    string guardContent = File.ReadAllText(guardFile);
+    guardContent.Should().Contain("i.country_code = d.country_code");
+    guardContent.Should().Contain("i.dialling_code = d.dialling_code");
+    guardContent.Should().NotContain("i.id = d.id");
+  }
+
+  // --- Missing PK in cascade trigger throws --------------------------------
+
+  [Fact]
+  public void Execute_MissingPrimaryKey_FailsWithError()
+  {
+    // Arrange: parent with no PK columns
+    TableAnalysis parent = new()
+    {
+      Name = "no_pk_parent",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasActiveColumn = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "record_active",
+      PrimaryKeyColumns = [],
+      ChildTables = ["child"],
+      IsLeafTable = false,
+      SoftDeleteMode = SoftDeleteMode.Cascade
+    };
+    TableAnalysis child = LeafTable("child", "parent_id", "no_pk_parent");
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    bool result = task.Execute();
+
+    // Assert: should fail because PK is required for trigger generation
+    result.Should().BeFalse();
+  }
+
   public void Dispose()
   {
     string root = Path.GetDirectoryName(_outputDir)!;

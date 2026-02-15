@@ -49,6 +49,21 @@ public class TableMetadataVisitor : TSqlFragmentVisitor
     base.Visit(node);
   }
 
+  public override void Visit(AlterTableAddTableElementStatement node)
+  {
+    // Extract constraints defined via ALTER TABLE ... ADD CONSTRAINT
+    // This handles the common pattern where PKs and FKs are defined after CREATE TABLE
+    if (node.Definition?.TableConstraints != null)
+    {
+      foreach (ConstraintDefinition constraint in node.Definition.TableConstraints)
+      {
+        Constraints.Add(constraint);
+      }
+    }
+
+    base.Visit(node);
+  }
+
   private void ExtractIndexes(CreateTableStatement node)
   {
     // Try to extract indexes using reflection to handle API differences
