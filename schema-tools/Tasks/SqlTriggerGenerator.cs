@@ -51,7 +51,6 @@ public class SqlTriggerGenerator : MSTask
   /// </summary>
   public string DefaultSchema { get; set; } = "dbo";
 
-  // Testing support
   internal SourceAnalysisResult? TestAnalysis { get; set; }
 
   public override bool Execute()
@@ -65,10 +64,8 @@ public class SqlTriggerGenerator : MSTask
 
       SourceAnalysisResult analysis = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
 
-      // Build lookup for table details
       var tableLookup = analysis.Tables.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
 
-      // Build lookup for explicit triggers (not in _generated directory)
       // Explicit triggers always take precedence over generated ones
       var explicitTriggers = analysis.ExistingTriggers
         .Where(t => !t.IsGenerated)
@@ -88,12 +85,10 @@ public class SqlTriggerGenerator : MSTask
       // PHASE 1: Parent Table Triggers (Cascade or Restrict mode)
       // ============================================================================
 
-      // Parent tables with soft-delete and children, excluding Ignore mode
       var parentTables = analysis.Tables
         .Where(t => t.HasSoftDelete && t.ChildTables.Count > 0 && t.SoftDeleteMode != SoftDeleteMode.Ignore)
         .ToList();
 
-      // Count ignored tables for reporting
       skippedIgnore = analysis.Tables
         .Count(t => t.HasSoftDelete && t.ChildTables.Count > 0 && t.SoftDeleteMode == SoftDeleteMode.Ignore);
 
@@ -105,7 +100,6 @@ public class SqlTriggerGenerator : MSTask
 
         foreach (TableAnalysis parent in parentTables)
         {
-          // Determine trigger name based on mode
           string triggerName = parent.SoftDeleteMode == SoftDeleteMode.Restrict
             ? $"trg_{parent.Name}_restrict_soft_delete"
             : $"trg_{parent.Name}_cascade_soft_delete";
@@ -121,7 +115,6 @@ public class SqlTriggerGenerator : MSTask
             continue;
           }
 
-          // Check if exists and Force not set
           if (File.Exists(filePath) && !Force)
           {
             Log.LogMessage(MessageImportance.Low, $"  Skipped {parent.Name}: Already exists");
@@ -129,7 +122,6 @@ public class SqlTriggerGenerator : MSTask
             continue;
           }
 
-          // Generate trigger based on mode
           string triggerSql;
           if (parent.SoftDeleteMode == SoftDeleteMode.Restrict)
           {
@@ -151,7 +143,6 @@ public class SqlTriggerGenerator : MSTask
       // PHASE 2: Reactivation Guard Triggers (for child tables with soft-delete parents)
       // ============================================================================
 
-      // Skip Phase 2 if generateReactivationGuards is disabled
       if (!analysis.Features.GenerateReactivationGuards)
       {
         Log.LogMessage(MessageImportance.High, string.Empty);
@@ -159,7 +150,6 @@ public class SqlTriggerGenerator : MSTask
       }
       else
       {
-        // Child tables that have FK references to soft-delete parent tables (excluding Ignore mode)
         var childTables = analysis.Tables
           .Where(t => t.HasSoftDelete && t.ForeignKeyReferences.Count > 0 && t.SoftDeleteMode != SoftDeleteMode.Ignore)
           .Where(t => t.ForeignKeyReferences.Any(fk =>
@@ -193,7 +183,6 @@ public class SqlTriggerGenerator : MSTask
               continue;
             }
 
-            // Generate reactivation guard trigger
             string triggerSql = GenerateReactivationGuardTrigger(child, tableLookup, analysis.Columns);
             File.WriteAllText(filePath, triggerSql, Encoding.UTF8);
 
@@ -209,7 +198,6 @@ public class SqlTriggerGenerator : MSTask
       // PHASE 3: Reactivation Cascade Triggers (for parent tables with ReactivationCascade enabled)
       // ============================================================================
 
-      // Parent tables with ReactivationCascade enabled and children
       var reactivationCascadeTables = analysis.Tables
         .Where(t => t.HasSoftDelete && t.ReactivationCascade && t.ChildTables.Count > 0)
         .ToList();
@@ -241,7 +229,6 @@ public class SqlTriggerGenerator : MSTask
             continue;
           }
 
-          // Generate reactivation cascade trigger
           string triggerSql = GenerateReactivationCascadeTrigger(parent, tableLookup, analysis.Columns);
           File.WriteAllText(filePath, triggerSql, Encoding.UTF8);
 
@@ -250,7 +237,6 @@ public class SqlTriggerGenerator : MSTask
         }
       }
 
-      // Summary
       Log.LogMessage(MessageImportance.High, string.Empty);
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, "  Summary");
@@ -381,7 +367,6 @@ public class SqlTriggerGenerator : MSTask
     sb.AppendLine($"    SELECT TOP 1 @updated_by = {columns.UpdatedBy} FROM inserted;");
     sb.AppendLine();
 
-    // Generate cascade UPDATE for each child table
     foreach (string childName in parent.ChildTables)
     {
       if (!tableLookup.TryGetValue(childName, out TableAnalysis? child))
@@ -482,7 +467,6 @@ public class SqlTriggerGenerator : MSTask
         $"Cannot generate reactivation guard trigger for '{child.Name}': no primary key columns detected");
     }
 
-    // Get all soft-delete parent references
     var softDeleteParents = child.ForeignKeyReferences
       .Where(fk => tableLookup.TryGetValue(fk.ReferencedTable, out TableAnalysis? p) && p.HasSoftDelete)
       .Select(fk => (FK: fk, Parent: tableLookup[fk.ReferencedTable]))
@@ -534,7 +518,6 @@ public class SqlTriggerGenerator : MSTask
     sb.AppendLine("        RETURN;");
     sb.AppendLine();
 
-    // Check each parent FK
     foreach ((ForeignKeyRef fk, TableAnalysis parent) in softDeleteParents)
     {
       string parentSchema = parent.Schema ?? DefaultSchema;
@@ -638,7 +621,6 @@ public class SqlTriggerGenerator : MSTask
     sb.AppendLine("        RETURN;");
     sb.AppendLine();
 
-    // Generate check for each child table
     foreach (string childName in parent.ChildTables)
     {
       if (!tableLookup.TryGetValue(childName, out TableAnalysis? child))
@@ -773,7 +755,6 @@ public class SqlTriggerGenerator : MSTask
     sb.AppendLine($"    SELECT TOP 1 @updated_by = {columns.UpdatedBy} FROM inserted;");
     sb.AppendLine();
 
-    // Generate cascade reactivation UPDATE for each child table
     foreach (string childName in parent.ChildTables)
     {
       if (!tableLookup.TryGetValue(childName, out TableAnalysis? child))

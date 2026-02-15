@@ -32,63 +32,33 @@ public enum SoftDeleteMode
 /// </summary>
 public class SchemaToolsConfig
 {
-  /// <summary>
-  /// Database name
-  /// </summary>
   [JsonPropertyName("database")]
   public string Database { get; set; } = string.Empty;
 
-  /// <summary>
-  /// Default schema name
-  /// </summary>
   [JsonPropertyName("defaultSchema")]
   public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
 
-  /// <summary>
-  /// SQL Server version for parser
-  /// </summary>
   [JsonPropertyName("sqlServerVersion")]
   public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
 
-  /// <summary>
-  /// Feature flags
-  /// </summary>
   [JsonPropertyName("features")]
   public FeatureConfig Features { get; set; } = new();
 
-  /// <summary>
-  /// Validation settings
-  /// </summary>
   [JsonPropertyName("validation")]
   public ValidationConfig Validation { get; set; } = new();
 
-  /// <summary>
-  /// Documentation settings
-  /// </summary>
   [JsonPropertyName("documentation")]
   public DocumentationConfig Documentation { get; set; } = new();
 
-  /// <summary>
-  /// Column naming conventions used for pattern detection
-  /// </summary>
   [JsonPropertyName("columns")]
   public ColumnNamingConfig Columns { get; set; } = new();
 
-  /// <summary>
-  /// Purge procedure configuration
-  /// </summary>
   [JsonPropertyName("purge")]
   public PurgeConfig Purge { get; set; } = new();
 
-  /// <summary>
-  /// Active-record views configuration
-  /// </summary>
   [JsonPropertyName("views")]
   public ViewsConfig Views { get; set; } = new();
 
-  /// <summary>
-  /// Custom category descriptions
-  /// </summary>
   [JsonPropertyName("categories")]
   public Dictionary<string, string> Categories { get; set; } = new();
 
@@ -233,15 +203,9 @@ public class SchemaToolsConfig
 
 public class FeatureConfig
 {
-  /// <summary>
-  /// Enable soft delete pattern (temporal + active column)
-  /// </summary>
   [JsonPropertyName("enableSoftDelete")]
   public bool EnableSoftDelete { get; set; } = true;
 
-  /// <summary>
-  /// Enable temporal versioning detection
-  /// </summary>
   [JsonPropertyName("enableTemporalVersioning")]
   public bool EnableTemporalVersioning { get; set; } = true;
 
@@ -259,15 +223,9 @@ public class FeatureConfig
   [JsonPropertyName("generateReactivationGuards")]
   public bool GenerateReactivationGuards { get; set; } = true;
 
-  /// <summary>
-  /// Detect and document polymorphic patterns
-  /// </summary>
   [JsonPropertyName("detectPolymorphicPatterns")]
   public bool DetectPolymorphicPatterns { get; set; } = true;
 
-  /// <summary>
-  /// Detect and document append-only tables
-  /// </summary>
   [JsonPropertyName("detectAppendOnlyTables")]
   public bool DetectAppendOnlyTables { get; set; } = true;
 
@@ -290,133 +248,81 @@ public class FeatureConfig
 
 public class ValidationConfig
 {
-  /// <summary>
-  /// Validate foreign key references
-  /// </summary>
   [JsonPropertyName("validateForeignKeys")]
   public bool ValidateForeignKeys { get; set; } = true;
 
-  /// <summary>
-  /// Validate polymorphic table consistency
-  /// </summary>
   [JsonPropertyName("validatePolymorphic")]
   public bool ValidatePolymorphic { get; set; } = true;
 
-  /// <summary>
-  /// Validate temporal table structure
-  /// </summary>
   [JsonPropertyName("validateTemporal")]
   public bool ValidateTemporal { get; set; } = true;
 
-  /// <summary>
-  /// Validate audit column consistency
-  /// </summary>
   [JsonPropertyName("validateAuditColumns")]
   public bool ValidateAuditColumns { get; set; } = true;
 
-  /// <summary>
-  /// Enforce naming conventions
-  /// </summary>
   [JsonPropertyName("enforceNamingConventions")]
   public bool EnforceNamingConventions { get; set; } = true;
 
-  /// <summary>
-  /// Treat warnings as errors
-  /// </summary>
   [JsonPropertyName("treatWarningsAsErrors")]
   public bool TreatWarningsAsErrors { get; set; } = false;
 }
 
 public class DocumentationConfig
 {
-  /// <summary>
-  /// Generate documentation
-  /// </summary>
   [JsonPropertyName("enabled")]
   public bool Enabled { get; set; } = true;
 
-  /// <summary>
-  /// Include ER diagrams (Mermaid)
-  /// </summary>
   [JsonPropertyName("includeErDiagrams")]
   public bool IncludeErDiagrams { get; set; } = true;
 
-  /// <summary>
-  /// Include statistics
-  /// </summary>
   [JsonPropertyName("includeStatistics")]
   public bool IncludeStatistics { get; set; } = true;
 
-  /// <summary>
-  /// Include constraints
-  /// </summary>
   [JsonPropertyName("includeConstraints")]
   public bool IncludeConstraints { get; set; } = true;
 
-  /// <summary>
-  /// Include indexes
-  /// </summary>
   [JsonPropertyName("includeIndexes")]
   public bool IncludeIndexes { get; set; } = false;
 }
 
 /// <summary>
-/// Column naming conventions for pattern detection.
-/// All names are matched case-insensitively.
+/// Column naming conventions for pattern detection (matched case-insensitively).
 /// </summary>
 public class ColumnNamingConfig
 {
-  /// <summary>
-  /// Soft-delete active column name
-  /// </summary>
   [JsonPropertyName("active")]
   public string Active { get; set; } = SchemaToolsDefaults.ActiveColumn;
 
   /// <summary>
-  /// Value indicating active state (used in generated SQL)
+  /// SQL literal for active state (used in generated triggers and views).
   /// </summary>
   [JsonPropertyName("activeValue")]
   public string ActiveValue { get; set; } = SchemaToolsDefaults.ActiveValue;
 
   /// <summary>
-  /// Value indicating inactive/deleted state (used in generated SQL)
+  /// SQL literal for inactive/deleted state (used in generated triggers and views).
   /// </summary>
   [JsonPropertyName("inactiveValue")]
   public string InactiveValue { get; set; } = SchemaToolsDefaults.InactiveValue;
 
-  /// <summary>
-  /// Append-only timestamp column name
-  /// </summary>
   [JsonPropertyName("createdAt")]
   public string CreatedAt { get; set; } = SchemaToolsDefaults.CreatedAtColumn;
 
-  /// <summary>
-  /// Audit column: created by
-  /// </summary>
   [JsonPropertyName("createdBy")]
   public string CreatedBy { get; set; } = SchemaToolsDefaults.CreatedByColumn;
 
-  /// <summary>
-  /// Audit column: updated by
-  /// </summary>
   [JsonPropertyName("updatedBy")]
   public string UpdatedBy { get; set; } = SchemaToolsDefaults.UpdatedByColumn;
 
   /// <summary>
-  /// SQL data type for the updated_by column (used in generated triggers)
+  /// SQL data type for the updated_by column (used in generated triggers).
   /// </summary>
   [JsonPropertyName("updatedByType")]
   public string UpdatedByType { get; set; } = SchemaToolsDefaults.UpdatedByType;
 
-  /// <summary>
-  /// Temporal period start column name
-  /// </summary>
   [JsonPropertyName("validFrom")]
   public string ValidFrom { get; set; } = SchemaToolsDefaults.ValidFromColumn;
 
-  /// <summary>
-  /// Temporal period end column name
-  /// </summary>
   [JsonPropertyName("validTo")]
   public string ValidTo { get; set; } = SchemaToolsDefaults.ValidToColumn;
 
@@ -435,39 +341,21 @@ public class ColumnNamingConfig
   public List<PolymorphicPatternConfig> PolymorphicPatterns { get; set; } = new();
 }
 
-/// <summary>
-/// Purge procedure configuration
-/// </summary>
 public class PurgeConfig
 {
-  /// <summary>
-  /// Whether to generate the purge procedure
-  /// </summary>
   [JsonPropertyName("enabled")]
   public bool Enabled { get; set; } = true;
 
-  /// <summary>
-  /// Name of the generated purge procedure
-  /// </summary>
   [JsonPropertyName("procedureName")]
   public string ProcedureName { get; set; } = SchemaToolsDefaults.PurgeProcedureName;
 
-  /// <summary>
-  /// Default grace period in days before soft-deleted records can be purged
-  /// </summary>
   [JsonPropertyName("defaultGracePeriodDays")]
   public int DefaultGracePeriodDays { get; set; } = SchemaToolsDefaults.DefaultGracePeriodDays;
 
-  /// <summary>
-  /// Default batch size for purge operations (0 = unlimited)
-  /// </summary>
   [JsonPropertyName("defaultBatchSize")]
   public int DefaultBatchSize { get; set; } = SchemaToolsDefaults.DefaultBatchSize;
 }
 
-/// <summary>
-/// A single polymorphic type/ID column pair
-/// </summary>
 public class PolymorphicPatternConfig
 {
   [JsonPropertyName("typeColumn")]
@@ -507,9 +395,6 @@ public class FeatureOverrideConfig
   [JsonPropertyName("softDeleteMode")]
   public SoftDeleteMode? SoftDeleteMode { get; set; }
 
-  /// <summary>
-  /// Override reactivation guard generation for this table.
-  /// </summary>
   [JsonPropertyName("generateReactivationGuards")]
   public bool? GenerateReactivationGuards { get; set; }
   /// <summary>
@@ -520,9 +405,6 @@ public class FeatureOverrideConfig
   [JsonPropertyName("reactivationCascade")]
   public bool? ReactivationCascade { get; set; }
 
-  /// <summary>
-  /// Override the reactivation cascade timestamp tolerance in milliseconds.
-  /// </summary>
   [JsonPropertyName("reactivationCascadeToleranceMs")]
   public int? ReactivationCascadeToleranceMs { get; set; }
 
@@ -540,9 +422,6 @@ public class FeatureOverrideConfig
 /// </summary>
 public class ViewsConfig
 {
-  /// <summary>
-  /// Generate active-record views for soft-delete tables.
-  /// </summary>
   [JsonPropertyName("enabled")]
   public bool Enabled { get; set; } = true;
 
@@ -552,9 +431,6 @@ public class ViewsConfig
   [JsonPropertyName("namingPattern")]
   public string NamingPattern { get; set; } = SchemaToolsDefaults.ViewNamingPattern;
 
-  /// <summary>
-  /// Generate companion views for soft-deleted records (for audit/admin use).
-  /// </summary>
   [JsonPropertyName("includeDeletedViews")]
   public bool IncludeDeletedViews { get; set; } = false;
 

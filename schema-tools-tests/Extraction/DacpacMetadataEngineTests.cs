@@ -229,6 +229,7 @@ public sealed class DacpacMetadataEngineTests : IDisposable
       Path.Combine(_tempDir, "nonexistent.dacpac"),
       outputFile,
       string.Empty,
+      string.Empty,
       "Database",
       _ => { }, _ => { }, _ => { }, msg => _errorMessages.Add(msg));
 
@@ -278,7 +279,7 @@ public sealed class DacpacMetadataEngineTests : IDisposable
     var config = new SchemaToolsConfig { Database = "TestDB" };
 
     var engine = new DacpacMetadataEngine(
-      "unused.dacpac", outputFile, string.Empty, "Database",
+      "unused.dacpac", outputFile, string.Empty, string.Empty, "Database",
       msg => _infoMessages.Add(msg), _ => { }, _ => { }, _ => { })
     {
       OverrideModel = model,
@@ -326,6 +327,229 @@ public sealed class DacpacMetadataEngineTests : IDisposable
     table.Columns.Single(c => c.Name == "required").Nullable.Should().BeFalse();
   }
 
+  // -- Bug A: Category bridging from analysis --------------------------------
+
+  [Fact]
+  public void Execute_WithCategories_BridgesToTableMetadata()
+  {
+    TSqlModel model = CreateModel(
+      "CREATE TABLE [dbo].[users] ([id] INT NOT NULL PRIMARY KEY);",
+      "CREATE TABLE [dbo].[audit_log] ([id] INT NOT NULL PRIMARY KEY);");
+    string outputFile = OutputPath("schema.json");
+    var categories = new Dictionary<string, string>
+    {
+      ["users"] = "core",
+      ["audit_log"] = "audit"
+    };
+
+    RunEngine(model, outputFile, categories: categories);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    metadata!.Tables.Single(t => t.Name == "users").Category.Should().Be("core");
+    metadata.Tables.Single(t => t.Name == "audit_log").Category.Should().Be("audit");
+  }
+
+  [Fact]
+  public void Execute_WithoutCategories_LeavesNull()
+  {
+    TSqlModel model = CreateModel("CREATE TABLE [dbo].[t] ([id] INT NOT NULL PRIMARY KEY);");
+    string outputFile = OutputPath("schema.json");
+
+    RunEngine(model, outputFile);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    metadata!.Tables.Single().Category.Should().BeNull();
+  }
+
+  // -- Bug B: Structured type decomposition ----------------------------------
+
+  [Fact]
+  public void Execute_VarcharColumn_ExposesMaxLength()
+  {
+    TSqlModel model = CreateModel(@"
+      CREATE TABLE [dbo].[t] (
+        [id] INT NOT NULL PRIMARY KEY,
+        [name] VARCHAR(100) NOT NULL
+      );");
+    string outputFile = OutputPath("schema.json");
+
+    RunEngine(model, outputFile);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    ColumnMetadata col = metadata!.Tables.Single().Columns.Single(c => c.Name == "name");
+    col.MaxLength.Should().Be(100);
+    col.IsMaxLength.Should().BeFalse();
+    col.Precision.Should().BeNull();
+    col.Scale.Should().BeNull();
+  }
+
+  [Fact]
+  public void Execute_VarcharMaxColumn_SetsIsMaxLength()
+  {
+    TSqlModel model = CreateModel(@"
+      CREATE TABLE [dbo].[t] (
+        [id] INT NOT NULL PRIMARY KEY,
+        [payload] VARCHAR(MAX) NOT NULL
+      );");
+    string outputFile = OutputPath("schema.json");
+
+    RunEngine(model, outputFile);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    ColumnMetadata col = metadata!.Tables.Single().Columns.Single(c => c.Name == "payload");
+    col.Type.Should().Be("varchar(max)");
+    col.IsMaxLength.Should().BeTrue();
+    col.MaxLength.Should().BeNull();
+  }
+
+  [Fact]
+  public void Execute_DecimalColumn_ExposesPrecisionAndScale()
+  {
+    TSqlModel model = CreateModel(@"
+      CREATE TABLE [dbo].[t] (
+        [id] INT NOT NULL PRIMARY KEY,
+        [amount] DECIMAL(9,6) NOT NULL
+      );");
+    string outputFile = OutputPath("schema.json");
+
+    RunEngine(model, outputFile);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    ColumnMetadata col = metadata!.Tables.Single().Columns.Single(c => c.Name == "amount");
+    col.Type.Should().Be("decimal(9,6)");
+    col.Precision.Should().Be(9);
+    col.Scale.Should().Be(6);
+    col.MaxLength.Should().BeNull();
+  }
+
+  [Fact]
+  public void Execute_NvarcharColumn_ExposesMaxLength()
+  {
+    TSqlModel model = CreateModel(@"
+      CREATE TABLE [dbo].[t] (
+        [id] INT NOT NULL PRIMARY KEY,
+        [title] NVARCHAR(255) NOT NULL
+      );");
+    string outputFile = OutputPath("schema.json");
+
+    RunEngine(model, outputFile);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    ColumnMetadata col = metadata!.Tables.Single().Columns.Single(c => c.Name == "title");
+    col.Type.Should().Be("nvarchar(255)");
+    col.MaxLength.Should().Be(255);
+    col.IsMaxLength.Should().BeFalse();
+  }
+
+  [Fact]
+  public void Execute_IntColumn_NoStructuredTypeProperties()
+  {
+    TSqlModel model = CreateModel("CREATE TABLE [dbo].[t] ([id] INT NOT NULL PRIMARY KEY);");
+    string outputFile = OutputPath("schema.json");
+
+    RunEngine(model, outputFile);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    ColumnMetadata col = metadata!.Tables.Single().Columns.Single(c => c.Name == "id");
+    col.MaxLength.Should().BeNull();
+    col.Precision.Should().BeNull();
+    col.Scale.Should().BeNull();
+    col.IsMaxLength.Should().BeFalse();
+  }
+
+  // -- Bug C: Polymorphic FK column marking ----------------------------------
+
+  [Fact]
+  public void Execute_PolymorphicTable_MarksTypeAndIdColumns()
+  {
+    TSqlModel model = CreateModel(@"
+      CREATE TABLE [dbo].[phones] (
+        [id] INT NOT NULL PRIMARY KEY,
+        [owner_type] VARCHAR(50) NOT NULL,
+        [owner_id] UNIQUEIDENTIFIER NOT NULL,
+        [number] VARCHAR(20) NOT NULL,
+        CONSTRAINT [CK_phones_owner_type] CHECK ([owner_type] IN ('user', 'organisation'))
+      );");
+    string outputFile = OutputPath("schema.json");
+    var config = new SchemaToolsConfig();
+    config.Columns.PolymorphicPatterns.Add(new PolymorphicPatternConfig
+    {
+      TypeColumn = "owner_type",
+      IdColumn = "owner_id"
+    });
+
+    RunEngine(model, outputFile, config);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    TableMetadata table = metadata!.Tables.Single(t => t.Name == "phones");
+    table.IsPolymorphic.Should().BeTrue();
+    table.Columns.Single(c => c.Name == "owner_type").IsPolymorphicForeignKey.Should().BeTrue();
+    table.Columns.Single(c => c.Name == "owner_id").IsPolymorphicForeignKey.Should().BeTrue();
+    table.Columns.Single(c => c.Name == "number").IsPolymorphicForeignKey.Should().BeFalse();
+  }
+
+  // -- Bug D: Composite FK column-level metadata -----------------------------
+
+  [Fact]
+  public void Execute_CompositeFK_SetsColumnLevelMetadata()
+  {
+    TSqlModel model = CreateModel(
+      @"CREATE TABLE [dbo].[parent] (
+        [key_a] INT NOT NULL,
+        [key_b] INT NOT NULL,
+        CONSTRAINT [PK_parent] PRIMARY KEY ([key_a], [key_b])
+      );",
+      @"CREATE TABLE [dbo].[child] (
+        [id] INT NOT NULL PRIMARY KEY,
+        [ref_a] INT NOT NULL,
+        [ref_b] INT NOT NULL,
+        CONSTRAINT [FK_child_parent] FOREIGN KEY ([ref_a], [ref_b]) REFERENCES [dbo].[parent]([key_a], [key_b])
+      );");
+    string outputFile = OutputPath("schema.json");
+
+    RunEngine(model, outputFile);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    TableMetadata child = metadata!.Tables.Single(t => t.Name == "child");
+
+    // Constraint-level: isComposite should be true
+    child.Constraints.ForeignKeys.Single().IsComposite.Should().BeTrue();
+
+    // Column-level: both columns should have FK reference and composite flag
+    ColumnMetadata refA = child.Columns.Single(c => c.Name == "ref_a");
+    refA.IsCompositeFK.Should().BeTrue();
+    refA.ForeignKey.Should().NotBeNull();
+    refA.ForeignKey!.Table.Should().Be("parent");
+    refA.ForeignKey.Column.Should().Be("key_a");
+
+    ColumnMetadata refB = child.Columns.Single(c => c.Name == "ref_b");
+    refB.IsCompositeFK.Should().BeTrue();
+    refB.ForeignKey.Should().NotBeNull();
+    refB.ForeignKey!.Table.Should().Be("parent");
+    refB.ForeignKey.Column.Should().Be("key_b");
+  }
+
+  [Fact]
+  public void Execute_SingleColumnFK_NotMarkedAsComposite()
+  {
+    TSqlModel model = CreateModel(
+      "CREATE TABLE [dbo].[parent] ([id] INT NOT NULL PRIMARY KEY);",
+      @"CREATE TABLE [dbo].[child] (
+        [id] INT NOT NULL PRIMARY KEY,
+        [parent_id] INT NOT NULL,
+        CONSTRAINT [FK_child_parent] FOREIGN KEY ([parent_id]) REFERENCES [dbo].[parent]([id])
+      );");
+    string outputFile = OutputPath("schema.json");
+
+    RunEngine(model, outputFile);
+
+    SchemaMetadata? metadata = ReadMetadata(outputFile);
+    TableMetadata child = metadata!.Tables.Single(t => t.Name == "child");
+    ColumnMetadata parentCol = child.Columns.Single(c => c.Name == "parent_id");
+    parentCol.IsCompositeFK.Should().BeFalse();
+    parentCol.ForeignKey.Should().NotBeNull();
+  }
+
   // -- Helpers ---------------------------------------------------------------
 
   private static TSqlModel CreateModel(params string[] statements)
@@ -340,11 +564,16 @@ public sealed class DacpacMetadataEngineTests : IDisposable
 
   private string OutputPath(string fileName) => Path.Combine(_tempDir, fileName);
 
-  private bool RunEngine(TSqlModel model, string outputFile, SchemaToolsConfig? config = null)
+  private bool RunEngine(
+    TSqlModel model,
+    string outputFile,
+    SchemaToolsConfig? config = null,
+    Dictionary<string, string>? categories = null)
   {
     var engine = new DacpacMetadataEngine(
       "unused.dacpac",
       outputFile,
+      string.Empty,
       string.Empty,
       "Database",
       info: msg => _infoMessages.Add(msg),
@@ -353,7 +582,8 @@ public sealed class DacpacMetadataEngineTests : IDisposable
       error: msg => _errorMessages.Add(msg))
     {
       OverrideModel = model,
-      OverrideConfig = config
+      OverrideConfig = config,
+      OverrideCategories = categories
     };
 
     return engine.Execute();

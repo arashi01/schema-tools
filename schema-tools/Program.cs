@@ -28,9 +28,9 @@ internal static class Program
     string? dacpacPath = null;
     string? outputFile = null;
     string? configFile = null;
+    string? analysisFile = null;
     string databaseName = "Database";
 
-    // Parse named arguments
     for (int i = 1; i < args.Length; i++)
     {
       string arg = args[i];
@@ -48,6 +48,10 @@ internal static class Program
           break;
         case "--config" when next != null:
           configFile = next;
+          i++;
+          break;
+        case "--analysis" when next != null:
+          analysisFile = next;
           i++;
           break;
         case "--database" when next != null:
@@ -77,6 +81,7 @@ internal static class Program
       dacpacPath,
       outputFile,
       configFile ?? string.Empty,
+      analysisFile ?? string.Empty,
       databaseName,
       info: Console.WriteLine,
       verbose: _ => { }, // suppress verbose output in CLI mode
@@ -88,6 +93,6 @@ internal static class Program
 
   private static void PrintUsage()
   {
-    Console.Error.WriteLine("Usage: dotnet exec SchemaTools.dll extract-metadata --dacpac <path> --output <path> [--config <path>] [--database <name>]");
+    Console.Error.WriteLine("Usage: dotnet exec SchemaTools.dll extract-metadata --dacpac <path> --output <path> [--config <path>] [--analysis <path>] [--database <name>]");
   }
 }

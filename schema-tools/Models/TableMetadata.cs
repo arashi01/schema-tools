@@ -2,9 +2,6 @@
 
 namespace SchemaTools.Models;
 
-/// <summary>
-/// Metadata for a single table
-/// </summary>
 public class TableMetadata
 {
   [JsonPropertyName("name")]

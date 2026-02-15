@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.SqlServer.Dac.Model;
 using SchemaTools.Models;
 using SchemaTools.Utilities;
@@ -28,6 +29,7 @@ internal sealed class DacpacMetadataEngine
   private readonly string _dacpacPath;
   private readonly string _outputFile;
   private readonly string _configFile;
+  private readonly string _analysisFile;
   private readonly string _databaseName;
   private readonly Action<string> _info;
   private readonly Action<string> _verbose;
@@ -43,10 +45,14 @@ internal sealed class DacpacMetadataEngine
   /// <summary>Override model for testing (bypasses .dacpac file loading).</summary>
   internal TSqlModel? OverrideModel { get; init; }
 
+  /// <summary>Override category map for testing (bypasses analysis file loading).</summary>
+  internal Dictionary<string, string>? OverrideCategories { get; init; }
+
   internal DacpacMetadataEngine(
     string dacpacPath,
     string outputFile,
     string configFile,
+    string analysisFile,
     string databaseName,
     Action<string> info,
     Action<string> verbose,
@@ -56,6 +62,7 @@ internal sealed class DacpacMetadataEngine
     _dacpacPath = dacpacPath;
     _outputFile = outputFile;
     _configFile = configFile;
+    _analysisFile = analysisFile;
     _databaseName = databaseName;
     _info = info;
     _verbose = verbose;
@@ -93,7 +100,6 @@ internal sealed class DacpacMetadataEngine
         SqlServerVersion = _sqlVersion
       };
 
-      // Extract all tables
       IEnumerable<TSqlObject> tables = model.GetObjects(DacQueryScopes.UserDefined, Table.TypeClass);
       int tableCount = 0;
       int totalColumns = 0;
@@ -111,19 +117,22 @@ internal sealed class DacpacMetadataEngine
         totalConstraints += tableMeta.Constraints.CheckConstraints.Count;
       }
 
-      // Build FK dependency graph
+      // Build FK dependency graph (sets column-level FK references and composite FK flags)
       ResolveForeignKeyGraph(metadata);
 
       // Mark history tables (must be done before pattern detection)
       MarkHistoryTables(metadata);
 
-      // Detect patterns using config
+      // Bridge categories from pre-build analysis (dacpac has no comment annotations)
+      BridgeCategoriesFromAnalysis(metadata);
+
+      // Detect patterns using config (must run after categories are bridged
+      // so that category-based config overrides resolve correctly)
       foreach (TableMetadata table in metadata.Tables)
       {
         DetectTablePatterns(table, _config, _sqlVersion);
       }
 
-      // Calculate statistics
       metadata.Statistics = new SchemaStatistics
       {
         TotalTables = tableCount,
@@ -137,19 +146,17 @@ internal sealed class DacpacMetadataEngine
 
       metadata.Categories = _config.Categories;
 
-      // Ensure output directory exists
       string? outputDir = Path.GetDirectoryName(_outputFile);
       if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
       {
         Directory.CreateDirectory(outputDir);
       }
 
-      // Serialise
       var options = new JsonSerializerOptions
       {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
       };
 
       string json = JsonSerializer.Serialize(metadata, options);
@@ -245,21 +252,18 @@ internal sealed class DacpacMetadataEngine
       ? ScriptDomParser.ExtractAllComputedColumns(tableScript, _sqlVersion)
       : new Dictionary<string, ScriptDomParser.ComputedColumnInfo>(StringComparer.OrdinalIgnoreCase);
 
-    // Extract columns
     IEnumerable<TSqlObject> columns = table.GetReferenced(Table.Columns);
     foreach (TSqlObject column in columns)
     {
       ColumnMetadata colMeta = ExtractColumnMetadata(column, computedColumns);
       metadata.Columns.Add(colMeta);
 
-      // Check for active column
       if (string.Equals(colMeta.Name, _config.Columns.Active, StringComparison.OrdinalIgnoreCase))
       {
         metadata.HasActiveColumn = true;
       }
     }
 
-    // Check for temporal versioning (detect by checking for history table relationship)
     TSqlObject? historyTable = table.GetReferenced(Table.TemporalSystemVersioningHistoryTable).FirstOrDefault();
     metadata.HasTemporalVersioning = historyTable != null;
 
@@ -271,7 +275,6 @@ internal sealed class DacpacMetadataEngine
       metadata.HistoryTable = $"[{historySchema}].[{historyTableName}]";
     }
 
-    // Extract primary key constraint
     IEnumerable<TSqlObject> pkConstraints = table.GetReferencing(DacPKConstraint.Host);
     foreach (TSqlObject pk in pkConstraints)
     {
@@ -304,7 +307,6 @@ internal sealed class DacpacMetadataEngine
       }
     }
 
-    // Extract foreign key constraints
     IEnumerable<TSqlObject> fkConstraints = table.GetReferencing(DacFKConstraint.Host);
     foreach (TSqlObject fk in fkConstraints)
     {
@@ -366,7 +368,6 @@ internal sealed class DacpacMetadataEngine
       }
     }
 
-    // Extract unique constraints
     IEnumerable<TSqlObject> uniqueConstraints = table.GetReferencing(DacUniqueConstraint.Host);
     foreach (TSqlObject uc in uniqueConstraints)
     {
@@ -379,7 +380,6 @@ internal sealed class DacpacMetadataEngine
       });
     }
 
-    // Extract check constraints
     IEnumerable<TSqlObject> checkConstraints = table.GetReferencing(DacCheckConstraint.Host);
     foreach (TSqlObject cc in checkConstraints)
     {
@@ -416,13 +416,10 @@ internal sealed class DacpacMetadataEngine
       });
     }
 
-    // Extract default constraints - populate column-level DefaultValue/DefaultConstraintName
     ExtractDefaultConstraints(table, metadata);
 
-    // Extract indexes (non-clustered, non-PK, non-unique-constraint)
     ExtractIndexes(table, metadata);
 
-    // Mark columns that participate in unique constraints
     foreach (ModelUniqueConstraint uc in metadata.Constraints.UniqueConstraints.Where(u => u.Columns.Count == 1))
     {
       foreach (ColumnMetadata col in metadata.Columns.Where(c =>
@@ -440,13 +437,10 @@ internal sealed class DacpacMetadataEngine
   {
     string name = column.Name.Parts.LastOrDefault() ?? "";
 
-    // Get data type
     TSqlObject? dataType = column.GetReferenced(Column.DataType).FirstOrDefault();
     string typeName = dataType?.Name.Parts.LastOrDefault() ?? "unknown";
 
-    // Get length/precision info - wrapped in SafeGetProperty to handle
-    // potential DacFx model storage engine exceptions with Sql170+ models.
-    // These are structural (affect type representation in generated code).
+    // SafeGetProperty handles DacFx model storage engine exceptions with Sql170+ models
     int? length = SafeGetProperty<int?>(column, Column.Length, isStructural: true);
     int? precision = SafeGetProperty<int?>(column, Column.Precision, isStructural: true);
     int? scale = SafeGetProperty<int?>(column, Column.Scale, isStructural: true);
@@ -504,7 +498,6 @@ internal sealed class DacpacMetadataEngine
       }
     }
 
-    // Generated-always detection (temporal columns)
     bool isGeneratedAlways = false;
     string? generatedAlwaysType = null;
 
@@ -531,6 +524,10 @@ internal sealed class DacpacMetadataEngine
     {
       Name = name,
       Type = typeStr,
+      MaxLength = isMax ? null : (length.HasValue && length > 0 ? length : null),
+      Precision = precision.HasValue && precision > 0 ? precision : null,
+      Scale = scale.HasValue && scale > 0 ? scale : null,
+      IsMaxLength = isMax,
       Nullable = SafeGetProperty<bool?>(column, Column.Nullable, isStructural: true) ?? true,
       IsPrimaryKey = false, // Set after PK constraint extraction
       IsIdentity = SafeGetProperty<bool?>(column, Column.IsIdentity, isStructural: true) == true,
@@ -621,7 +618,6 @@ internal sealed class DacpacMetadataEngine
   /// </summary>
   private void ExtractIndexes(TSqlObject table, TableMetadata metadata)
   {
-    // Rowstore indexes
     IEnumerable<TSqlObject> indexes = table.GetReferencing(DacIndex.IndexedObject);
     foreach (TSqlObject index in indexes)
     {
@@ -681,7 +677,6 @@ internal sealed class DacpacMetadataEngine
       metadata.Indexes.Add(indexMeta);
     }
 
-    // Columnstore indexes
     IEnumerable<TSqlObject> csIndexes = table.GetReferencing(DacColumnStoreIndex.IndexedObject);
     foreach (TSqlObject csIndex in csIndexes)
     {
@@ -705,12 +700,92 @@ internal sealed class DacpacMetadataEngine
   }
 
   /// <summary>
+  /// Bridges category annotations from the pre-build analysis into the post-build
+  /// table metadata. The dacpac binary model does not contain SQL comment annotations,
+  /// so categories parsed from <c>-- @category</c> during source analysis must be
+  /// applied here to enable category-based config overrides and grouped documentation.
+  /// </summary>
+  private void BridgeCategoriesFromAnalysis(SchemaMetadata metadata)
+  {
+    Dictionary<string, string>? categoryMap = LoadCategoryMap();
+    if (categoryMap == null || categoryMap.Count == 0)
+    {
+      return;
+    }
+
+    int matched = 0;
+    foreach (TableMetadata table in metadata.Tables)
+    {
+      if (categoryMap.TryGetValue(table.Name, out string? category))
+      {
+        table.Category = category;
+        matched++;
+      }
+    }
+
+    _verbose($"Bridged categories for {matched}/{metadata.Tables.Count} tables from analysis");
+  }
+
+  /// <summary>
+  /// Loads the table-name-to-category map from the pre-build analysis JSON.
+  /// Returns null if there is no analysis file or it cannot be loaded.
+  /// </summary>
+  private Dictionary<string, string>? LoadCategoryMap()
+  {
+    if (OverrideCategories != null)
+    {
+      return OverrideCategories;
+    }
+
+    if (string.IsNullOrEmpty(_analysisFile) || !File.Exists(_analysisFile))
+    {
+      return null;
+    }
+
+    try
+    {
+      string json = File.ReadAllText(_analysisFile);
+      using JsonDocument doc = JsonDocument.Parse(json);
+      JsonElement root = doc.RootElement;
+
+      if (!root.TryGetProperty("tables", out JsonElement tablesElement) ||
+          tablesElement.ValueKind != JsonValueKind.Array)
+      {
+        return null;
+      }
+
+      var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+      foreach (JsonElement tableElement in tablesElement.EnumerateArray())
+      {
+        if (tableElement.TryGetProperty("name", out JsonElement nameEl) &&
+            tableElement.TryGetProperty("category", out JsonElement catEl) &&
+            nameEl.ValueKind == JsonValueKind.String &&
+            catEl.ValueKind == JsonValueKind.String)
+        {
+          string name = nameEl.GetString()!;
+          string cat = catEl.GetString()!;
+          if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(cat))
+          {
+            map[name] = cat;
+          }
+        }
+      }
+
+      return map;
+    }
+    catch (Exception ex)
+    {
+      _warning($"Could not load categories from analysis file: {ex.Message}");
+      return null;
+    }
+  }
+
+  /// <summary>
   /// Marks tables that are temporal history tables. These tables are referenced
   /// by another table's HistoryTable property and do not have primary keys by design.
   /// </summary>
   private static void MarkHistoryTables(SchemaMetadata metadata)
   {
-    // Build set of history table names from all tables that have temporal versioning
     var historyTableNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     foreach (TableMetadata table in metadata.Tables)
     {
@@ -727,7 +802,6 @@ internal sealed class DacpacMetadataEngine
       }
     }
 
-    // Mark matching tables
     foreach (TableMetadata table in metadata.Tables)
     {
       if (historyTableNames.Contains(table.Name))
@@ -739,16 +813,15 @@ internal sealed class DacpacMetadataEngine
 
   private static void ResolveForeignKeyGraph(SchemaMetadata metadata)
   {
-    // Mark columns with FK references
     foreach (TableMetadata table in metadata.Tables)
     {
       foreach (ModelFKConstraint fk in table.Constraints.ForeignKeys)
       {
         string fkSchema = fk.ReferencedSchema ?? metadata.DefaultSchema;
 
-        // Set column-level FK reference
         if (fk.Columns.Count == 1)
         {
+          // Single-column FK
           ColumnMetadata? col = table.Columns.FirstOrDefault(c =>
             string.Equals(c.Name, fk.Columns[0], StringComparison.OrdinalIgnoreCase));
 
@@ -762,6 +835,32 @@ internal sealed class DacpacMetadataEngine
             };
           }
         }
+        else
+        {
+          // Composite FK: set ForeignKey reference and mark IsCompositeFK on each column
+          for (int i = 0; i < fk.Columns.Count; i++)
+          {
+            ColumnMetadata? col = table.Columns.FirstOrDefault(c =>
+              string.Equals(c.Name, fk.Columns[i], StringComparison.OrdinalIgnoreCase));
+
+            if (col == null)
+            {
+              continue;
+            }
+
+            col.IsCompositeFK = true;
+
+            if (col.ForeignKey == null && i < fk.ReferencedColumns.Count)
+            {
+              col.ForeignKey = new ForeignKeyReference
+              {
+                Table = fk.ReferencedTable,
+                Column = fk.ReferencedColumns[i],
+                Schema = fkSchema
+              };
+            }
+          }
+        }
       }
     }
   }
@@ -770,13 +869,11 @@ internal sealed class DacpacMetadataEngine
   {
     SchemaToolsConfig effective = config.ResolveForTable(table.Name, table.Category);
 
-    // Set ActiveColumnName if the table has an active column
     if (table.HasActiveColumn)
     {
       table.ActiveColumnName = effective.Columns.Active;
     }
 
-    // Soft-delete detection
     if (effective.Features.EnableSoftDelete &&
         table.HasActiveColumn &&
         table.HasTemporalVersioning)
@@ -784,7 +881,6 @@ internal sealed class DacpacMetadataEngine
       table.HasSoftDelete = true;
     }
 
-    // Append-only detection
     if (effective.Features.DetectAppendOnlyTables)
     {
       bool hasCreatedAt = table.Columns.Any(c =>
@@ -817,6 +913,16 @@ internal sealed class DacpacMetadataEngine
             IdColumn = pattern.IdColumn,
             AllowedTypes = ExtractAllowedTypesForPolymorphic(table, pattern.TypeColumn, sqlVersion)
           };
+
+          foreach (ColumnMetadata col in table.Columns)
+          {
+            if (string.Equals(col.Name, pattern.TypeColumn, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(col.Name, pattern.IdColumn, StringComparison.OrdinalIgnoreCase))
+            {
+              col.IsPolymorphicForeignKey = true;
+            }
+          }
+
           break;
         }
       }

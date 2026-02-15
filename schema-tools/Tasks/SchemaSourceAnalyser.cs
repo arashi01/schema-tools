@@ -109,7 +109,6 @@ public class SchemaSourceAnalyser : MSTask
       {
         try
         {
-          // Analyse tables
           TableAnalysis? tableAnalysis = AnalyseTableFile(sqlFile, parser);
           if (tableAnalysis != null)
           {
@@ -117,10 +116,7 @@ public class SchemaSourceAnalyser : MSTask
             tablesParsed++;
           }
 
-          // Also discover existing triggers in this file
           DiscoverExistingTriggers(sqlFile, parser, analysis);
-
-          // Also discover existing views in this file
           DiscoverExistingViews(sqlFile, parser, analysis);
         }
         catch (Exception ex)
@@ -129,20 +125,15 @@ public class SchemaSourceAnalyser : MSTask
         }
       }
 
-      // Build FK dependency graph for cascade analysis
       BuildForeignKeyGraph(analysis);
-
-      // Detect leaf tables (tables with no children referencing them)
       DetectLeafTables(analysis);
 
-      // Ensure output directory exists
       string? outputDir = Path.GetDirectoryName(AnalysisOutput);
       if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
       {
         Directory.CreateDirectory(outputDir);
       }
 
-      // Serialise analysis
       var options = new JsonSerializerOptions
       {
         WriteIndented = true,
@@ -265,7 +256,6 @@ public class SchemaSourceAnalyser : MSTask
       SourceFile = filePath
     };
 
-    // Detect active column (soft-delete indicator)
     string activeColumnName = effective.Columns.Active;
     bool hasActiveColumn = visitor.ColumnDefinitions.Any(c =>
       string.Equals(c.ColumnIdentifier.Value, activeColumnName, StringComparison.OrdinalIgnoreCase));
@@ -273,7 +263,6 @@ public class SchemaSourceAnalyser : MSTask
     analysis.HasActiveColumn = hasActiveColumn;
     analysis.HasTemporalVersioning = visitor.HasTemporalVersioning;
 
-    // Populate temporal table details if detected
     if (visitor.HasTemporalVersioning)
     {
       string historySchema = visitor.HistorySchemaName ?? effective.DefaultSchema;
@@ -285,7 +274,6 @@ public class SchemaSourceAnalyser : MSTask
       analysis.ValidToColumn = effective.Columns.ValidTo;
     }
 
-    // Soft-delete = has active column + temporal versioning
     if (effective.Features.EnableSoftDelete && hasActiveColumn && visitor.HasTemporalVersioning)
     {
       analysis.HasSoftDelete = true;
@@ -295,7 +283,6 @@ public class SchemaSourceAnalyser : MSTask
       analysis.ReactivationCascadeToleranceMs = effective.Features.ReactivationCascadeToleranceMs;
     }
 
-    // Extract primary key
     foreach (ConstraintDefinition constraint in visitor.Constraints)
     {
       if (constraint is UniqueConstraintDefinition unique && unique.IsPrimaryKey)
@@ -307,7 +294,7 @@ public class SchemaSourceAnalyser : MSTask
       }
     }
 
-    // Also check inline PK constraints
+    // Inline PK constraints (fallback for single-column syntax)
     if (analysis.PrimaryKeyColumns.Count == 0)
     {
       foreach (ColumnDefinition colDef in visitor.ColumnDefinitions)
@@ -323,7 +310,6 @@ public class SchemaSourceAnalyser : MSTask
       }
     }
 
-    // Extract FK references (for dependency graph)
     foreach (ConstraintDefinition constraint in visitor.Constraints)
     {
       if (constraint is ForeignKeyConstraintDefinition fk)
@@ -356,7 +342,6 @@ public class SchemaSourceAnalyser : MSTask
       return;
     }
 
-    // Determine if this file is in the generated directory
     string normalisedPath = Path.GetFullPath(filePath).TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant();
     string normalisedGenDir = string.IsNullOrEmpty(GeneratedTriggersDirectory)
       ? string.Empty
@@ -398,7 +383,6 @@ public class SchemaSourceAnalyser : MSTask
       return;
     }
 
-    // Determine if this file is in the generated directory
     string normalisedPath = Path.GetFullPath(filePath).TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant();
     string normalisedGenDir = string.IsNullOrEmpty(GeneratedViewsDirectory)
       ? string.Empty
@@ -427,7 +411,6 @@ public class SchemaSourceAnalyser : MSTask
 
   private static void BuildForeignKeyGraph(SourceAnalysisResult analysis)
   {
-    // Build lookup for quick access
     var tablesByName = analysis.Tables.ToDictionary(
       t => $"[{t.Schema}].[{t.Name}]",
       t => t,
@@ -452,7 +435,6 @@ public class SchemaSourceAnalyser : MSTask
 
   private static void DetectLeafTables(SourceAnalysisResult analysis)
   {
-    // Leaf tables are tables that have no children referencing them
     foreach (TableAnalysis table in analysis.Tables)
     {
       table.IsLeafTable = table.ChildTables.Count == 0;

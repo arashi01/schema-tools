@@ -36,6 +36,12 @@ public class SchemaMetadataExtractor : MSTask
   public string ConfigFile { get; set; } = string.Empty;
 
   /// <summary>
+  /// Pre-build analysis file path (analysis.json). Used to bridge category
+  /// annotations from source SQL comments into the post-build metadata.
+  /// </summary>
+  public string AnalysisFile { get; set; } = string.Empty;
+
+  /// <summary>
   /// Database name for metadata.
   /// </summary>
   public string DatabaseName { get; set; } = "Database";
@@ -52,6 +58,7 @@ public class SchemaMetadataExtractor : MSTask
       DacpacPath,
       OutputFile,
       ConfigFile,
+      AnalysisFile,
       DatabaseName,
       info: msg => Log.LogMessage(MessageImportance.High, msg),
       verbose: msg => Log.LogMessage(MessageImportance.Low, msg),

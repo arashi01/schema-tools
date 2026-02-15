@@ -219,10 +219,11 @@
       DacpacPath="$(SchemaToolsDacpacPath)"
       OutputFile="$(SchemaToolsMetadataOutput)"
       ConfigFile="$(SchemaToolsConfig)"
+      AnalysisFile="$(SchemaToolsAnalysisOutput)"
       Condition="'$(MSBuildRuntimeType)' == 'Core'" />
 
     <!-- Full Framework MSBuild: dotnet exec -->
-    <Exec Command="&quot;$(_SchemaToolsDotnet)&quot; exec &quot;$(SchemaToolsNet10Assembly)&quot; extract-metadata --dacpac &quot;$(SchemaToolsDacpacPath)&quot; --output &quot;$(SchemaToolsMetadataOutput)&quot; --config &quot;$(SchemaToolsConfig)&quot;"
+    <Exec Command="&quot;$(_SchemaToolsDotnet)&quot; exec &quot;$(SchemaToolsNet10Assembly)&quot; extract-metadata --dacpac &quot;$(SchemaToolsDacpacPath)&quot; --output &quot;$(SchemaToolsMetadataOutput)&quot; --config &quot;$(SchemaToolsConfig)&quot; --analysis &quot;$(SchemaToolsAnalysisOutput)&quot;"
           Condition="'$(MSBuildRuntimeType)' != 'Core'" />
   </Target>
 

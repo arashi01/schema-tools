@@ -50,7 +50,6 @@ public class SqlProcedureGenerator : MSTask
   /// </summary>
   public bool Force { get; set; }
 
-  // Testing support
   internal SourceAnalysisResult? TestAnalysis { get; set; }
 
   public override bool Execute()
@@ -64,7 +63,6 @@ public class SqlProcedureGenerator : MSTask
 
       SourceAnalysisResult analysis = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
 
-      // Find all tables with soft-delete
       var softDeleteTables = analysis.Tables
         .Where(t => t.HasSoftDelete)
         .ToList();
@@ -77,7 +75,6 @@ public class SqlProcedureGenerator : MSTask
 
       Log.LogMessage(MessageImportance.High, $"Found {softDeleteTables.Count} table(s) with soft-delete");
 
-      // Build topological order (leaves first)
       List<TableAnalysis> deletionOrder = TopologicalSort(softDeleteTables);
 
       Log.LogMessage(MessageImportance.High, "Deletion order (FK-safe):");
@@ -89,7 +86,6 @@ public class SqlProcedureGenerator : MSTask
 
       Directory.CreateDirectory(OutputDirectory);
 
-      // Generate the purge procedure
       string fileName = $"{PurgeProcedureName}.sql";
       string filePath = Path.Combine(OutputDirectory, fileName);
 
@@ -104,7 +100,6 @@ public class SqlProcedureGenerator : MSTask
         Log.LogMessage($"+ Generated: {fileName}");
       }
 
-      // Summary
       Log.LogMessage(MessageImportance.High, string.Empty);
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, "  Summary");
@@ -254,7 +249,6 @@ BEGIN
       string activeColumn = table.ActiveColumnName ?? "active";
       string validToColumn = table.ValidToColumn ?? "valid_to";
 
-      // Build PK column list for JOIN - require explicit PK columns, no fallback
       List<string> pkColumns = table.PrimaryKeyColumns;
       if (pkColumns.Count == 0)
       {
@@ -266,7 +260,6 @@ BEGIN
         ? $"COUNT(DISTINCT t.{pkColumns[0]})"
         : "COUNT(*)";  // COUNT(*) is correct for multi-column PK with EXISTS filter
 
-      // Check if we have history table info for proper grace period checking
       bool hasHistoryTable = !string.IsNullOrEmpty(table.HistoryTable) && table.HasTemporalVersioning;
 
       sb.AppendLine($@"

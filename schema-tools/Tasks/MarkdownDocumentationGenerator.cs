@@ -18,13 +18,11 @@ public class MarkdownDocumentationGenerator : MSTask
 
   public string ConfigFile { get; set; } = string.Empty;
 
-  // Override documentation settings
   public bool? IncludeErDiagrams { get; set; }
   public bool? IncludeStatistics { get; set; }
   public bool? IncludeConstraints { get; set; }
   public bool? IncludeIndexes { get; set; }
 
-  // Allow injecting config and metadata for testing
   internal SchemaToolsConfig? TestConfig { get; set; }
   internal SchemaMetadata? TestMetadata { get; set; }
 
@@ -42,10 +40,8 @@ public class MarkdownDocumentationGenerator : MSTask
           "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, string.Empty);
 
-      // Load configuration
       LoadConfiguration();
 
-      // Load metadata
       SchemaMetadata? metadata = LoadMetadata();
       if (metadata == null)
       {
@@ -56,7 +52,6 @@ public class MarkdownDocumentationGenerator : MSTask
 
       var markdown = new StringBuilder();
 
-      // Title and metadata
       markdown.AppendLine("# Database Schema Documentation");
       markdown.AppendLine();
       markdown.AppendLine($"**Database:** {metadata.Database}  ");
@@ -65,25 +60,20 @@ public class MarkdownDocumentationGenerator : MSTask
       markdown.AppendLine($"**SQL Server:** {metadata.SqlServerVersion}");
       markdown.AppendLine();
 
-      // Table of contents
       GenerateTableOfContents(markdown, metadata);
 
-      // Statistics
       if (GetDocSetting(IncludeStatistics, _config.Documentation.IncludeStatistics))
       {
         GenerateStatistics(markdown, metadata);
       }
 
-      // ER Diagrams by category
       if (GetDocSetting(IncludeErDiagrams, _config.Documentation.IncludeErDiagrams))
       {
         GenerateErDiagrams(markdown, metadata);
       }
 
-      // Detailed table documentation
       GenerateTableDocumentation(markdown, metadata);
 
-      // Write to file
       string? outputDir = Path.GetDirectoryName(OutputFile);
       if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
       {
@@ -212,7 +202,6 @@ public class MarkdownDocumentationGenerator : MSTask
 
       foreach (TableMetadata? table in category)
       {
-        // Table definition
         markdown.AppendLine($"    {table.Name} {{");
 
         int columnCount = 0;
@@ -237,7 +226,6 @@ public class MarkdownDocumentationGenerator : MSTask
         markdown.AppendLine("    }");
       }
 
-      // Relationships
       foreach (TableMetadata? table in category)
       {
         foreach (ForeignKeyConstraint fk in table.Constraints.ForeignKeys)
@@ -289,7 +277,6 @@ public class MarkdownDocumentationGenerator : MSTask
       markdown.AppendLine();
     }
 
-    // Table properties
     var properties = new List<string>();
     if (table.HasTemporalVersioning)
       properties.Add("[Temporal]");
@@ -312,7 +299,6 @@ public class MarkdownDocumentationGenerator : MSTask
       markdown.AppendLine();
     }
 
-    // Columns
     markdown.AppendLine("#### Columns");
     markdown.AppendLine();
     markdown.AppendLine("| Column | Type | Nullable | Constraints | Description |");
@@ -343,13 +329,12 @@ public class MarkdownDocumentationGenerator : MSTask
 
     markdown.AppendLine();
 
-    // Constraints
+
     if (GetDocSetting(IncludeConstraints, _config.Documentation.IncludeConstraints))
     {
       GenerateConstraintsSection(markdown, table);
     }
 
-    // Indexes
     if (GetDocSetting(IncludeIndexes, _config.Documentation.IncludeIndexes) && table.Indexes.Count > 0)
     {
       GenerateIndexesSection(markdown, table);
@@ -370,7 +355,6 @@ public class MarkdownDocumentationGenerator : MSTask
     markdown.AppendLine("#### Constraints");
     markdown.AppendLine();
 
-    // Foreign Keys
     if (table.Constraints.ForeignKeys.Count > 0)
     {
       markdown.AppendLine("**Foreign Keys:**");
@@ -385,7 +369,6 @@ public class MarkdownDocumentationGenerator : MSTask
       markdown.AppendLine();
     }
 
-    // Unique Constraints
     if (table.Constraints.UniqueConstraints.Count > 0)
     {
       markdown.AppendLine("**Unique Constraints:**");
@@ -399,7 +382,6 @@ public class MarkdownDocumentationGenerator : MSTask
       markdown.AppendLine();
     }
 
-    // Check Constraints
     if (table.Constraints.CheckConstraints.Count > 0)
     {
       markdown.AppendLine("**Check Constraints:**");

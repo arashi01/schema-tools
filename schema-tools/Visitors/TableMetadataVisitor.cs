@@ -19,20 +19,17 @@ public class TableMetadataVisitor : TSqlFragmentVisitor
 
   public override void Visit(CreateTableStatement node)
   {
-    // Extract schema and table name
     if (node.SchemaObjectName.SchemaIdentifier != null)
     {
       SchemaName = node.SchemaObjectName.SchemaIdentifier.Value;
     }
     TableName = node.SchemaObjectName.BaseIdentifier.Value;
 
-    // Extract columns
     foreach (ColumnDefinition? element in node.Definition.ColumnDefinitions)
     {
       ColumnDefinitions.Add(element);
     }
 
-    // Extract table constraints
     foreach (ConstraintDefinition? constraint in node.Definition.TableConstraints)
     {
       Constraints.Add(constraint);
@@ -51,8 +48,7 @@ public class TableMetadataVisitor : TSqlFragmentVisitor
 
   public override void Visit(AlterTableAddTableElementStatement node)
   {
-    // Extract constraints defined via ALTER TABLE ... ADD CONSTRAINT
-    // This handles the common pattern where PKs and FKs are defined after CREATE TABLE
+    // Handles the common pattern where PKs and FKs are defined after CREATE TABLE
     if (node.Definition?.TableConstraints != null)
     {
       foreach (ConstraintDefinition constraint in node.Definition.TableConstraints)
