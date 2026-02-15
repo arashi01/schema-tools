@@ -95,9 +95,7 @@
   <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataExtractor"
              AssemblyFile="$(SchemaToolsTaskAssembly)"
              TaskFactory="TaskHostFactory"
-             Condition="'$(MSBuildRuntimeType)' != 'Core'">
-    <Task Runtime="CLR4" Architecture="CurrentArchitecture" />
-  </UsingTask>
+             Condition="'$(MSBuildRuntimeType)' != 'Core'" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataExtractor"
              AssemblyFile="$(SchemaToolsTaskAssembly)"
