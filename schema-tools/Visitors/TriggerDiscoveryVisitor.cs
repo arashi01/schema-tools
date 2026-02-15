@@ -18,7 +18,6 @@ public class TriggerDiscoveryVisitor : TSqlFragmentVisitor
     string? schema = node.Name.SchemaIdentifier?.Value;
     string name = node.Name.BaseIdentifier.Value;
 
-    // Extract target table from TriggerObject
     string? targetSchema = node.TriggerObject?.Name?.SchemaIdentifier?.Value;
     string? targetTable = node.TriggerObject?.Name?.BaseIdentifier?.Value;
 

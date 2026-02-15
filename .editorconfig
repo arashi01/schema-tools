@@ -1,4 +1,4 @@
-﻿root = true
+root = true
 
 ###############################
 # All files
@@ -24,7 +24,7 @@ trim_trailing_whitespace = false
 
 #### Language Rules ####
 
-# 'this.' qualification — do not qualify (IDE0003/IDE0009)
+# 'this.' qualification -- do not qualify (IDE0003/IDE0009)
 dotnet_style_qualification_for_field = false:warning
 dotnet_style_qualification_for_property = false:warning
 dotnet_style_qualification_for_method = false:warning
@@ -34,7 +34,7 @@ dotnet_style_qualification_for_event = false:warning
 dotnet_style_predefined_type_for_locals_parameters_members = true:warning
 dotnet_style_predefined_type_for_member_access = true:warning
 
-# Accessibility modifiers — always required, explicit private (IDE0040)
+# Accessibility modifiers -- always required, explicit private (IDE0040)
 dotnet_style_require_accessibility_modifiers = always:warning
 
 # Modifier ordering (IDE0036)
@@ -67,7 +67,7 @@ dotnet_style_coalesce_expression = true:warning
 dotnet_style_null_propagation = true:warning
 dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning
 
-# 'var' preferences — explicit types unless type is apparent (IDE0007/IDE0008)
+# 'var' preferences -- explicit types unless type is apparent (IDE0007/IDE0008)
 # Core requirement: "Explicit types over var where type isn't obvious from right-hand side"
 csharp_style_var_for_built_in_types = false:warning
 csharp_style_var_when_type_is_apparent = true:suggestion
@@ -113,7 +113,7 @@ csharp_using_directive_placement = outside_namespace:warning
 # Namespace declarations (IDE0160/IDE0161)
 csharp_style_namespace_declarations = file_scoped:warning
 
-# Prefer primary constructors (IDE0290) — off, not used in this project
+# Prefer primary constructors (IDE0290) -- off, not used in this project
 csharp_style_prefer_primary_constructors = false:suggestion
 
 # Prefer readonly struct (IDE0250)
@@ -199,7 +199,7 @@ dotnet_naming_symbols.interface.applicable_accessibilities = *
 dotnet_naming_style.begins_with_i.required_prefix = I
 dotnet_naming_style.begins_with_i.capitalization = pascal_case
 
-# Types — PascalCase
+# Types -- PascalCase
 dotnet_naming_rule.types_should_be_pascal_case.severity = warning
 dotnet_naming_rule.types_should_be_pascal_case.symbols = types
 dotnet_naming_rule.types_should_be_pascal_case.style = pascal_case
@@ -207,7 +207,7 @@ dotnet_naming_rule.types_should_be_pascal_case.style = pascal_case
 dotnet_naming_symbols.types.applicable_kinds = class, struct, interface, enum, delegate, record, record_struct
 dotnet_naming_symbols.types.applicable_accessibilities = *
 
-# Non-field members — PascalCase
+# Non-field members -- PascalCase
 dotnet_naming_rule.non_field_members_should_be_pascal_case.severity = warning
 dotnet_naming_rule.non_field_members_should_be_pascal_case.symbols = non_field_members
 dotnet_naming_rule.non_field_members_should_be_pascal_case.style = pascal_case
@@ -215,7 +215,7 @@ dotnet_naming_rule.non_field_members_should_be_pascal_case.style = pascal_case
 dotnet_naming_symbols.non_field_members.applicable_kinds = property, method, event
 dotnet_naming_symbols.non_field_members.applicable_accessibilities = *
 
-# Constants — PascalCase
+# Constants -- PascalCase
 dotnet_naming_rule.constants_should_be_pascal_case.severity = warning
 dotnet_naming_rule.constants_should_be_pascal_case.symbols = constants
 dotnet_naming_rule.constants_should_be_pascal_case.style = pascal_case
@@ -224,7 +224,7 @@ dotnet_naming_symbols.constants.applicable_kinds = field
 dotnet_naming_symbols.constants.required_modifiers = const
 dotnet_naming_symbols.constants.applicable_accessibilities = *
 
-# Static readonly fields — PascalCase
+# Static readonly fields -- PascalCase
 dotnet_naming_rule.static_readonly_should_be_pascal_case.severity = warning
 dotnet_naming_rule.static_readonly_should_be_pascal_case.symbols = static_readonly
 dotnet_naming_rule.static_readonly_should_be_pascal_case.style = pascal_case
@@ -233,7 +233,7 @@ dotnet_naming_symbols.static_readonly.applicable_kinds = field
 dotnet_naming_symbols.static_readonly.required_modifiers = static, readonly
 dotnet_naming_symbols.static_readonly.applicable_accessibilities = *
 
-# Private/internal fields — _camelCase
+# Private/internal fields -- _camelCase
 dotnet_naming_rule.private_fields_should_be_camel_case_with_underscore.severity = warning
 dotnet_naming_rule.private_fields_should_be_camel_case_with_underscore.symbols = private_fields
 dotnet_naming_rule.private_fields_should_be_camel_case_with_underscore.style = underscore_camel_case
@@ -244,7 +244,7 @@ dotnet_naming_symbols.private_fields.applicable_accessibilities = private, inter
 dotnet_naming_style.underscore_camel_case.required_prefix = _
 dotnet_naming_style.underscore_camel_case.capitalization = camel_case
 
-# Parameters — camelCase
+# Parameters -- camelCase
 dotnet_naming_rule.parameters_should_be_camel_case.severity = warning
 dotnet_naming_rule.parameters_should_be_camel_case.symbols = parameters
 dotnet_naming_rule.parameters_should_be_camel_case.style = camel_case
@@ -252,7 +252,7 @@ dotnet_naming_rule.parameters_should_be_camel_case.style = camel_case
 dotnet_naming_symbols.parameters.applicable_kinds = parameter
 dotnet_naming_symbols.parameters.applicable_accessibilities = *
 
-# Local variables — camelCase
+# Local variables -- camelCase
 dotnet_naming_rule.locals_should_be_camel_case.severity = warning
 dotnet_naming_rule.locals_should_be_camel_case.symbols = locals
 dotnet_naming_rule.locals_should_be_camel_case.style = camel_case
@@ -260,7 +260,7 @@ dotnet_naming_rule.locals_should_be_camel_case.style = camel_case
 dotnet_naming_symbols.locals.applicable_kinds = local
 dotnet_naming_symbols.locals.applicable_accessibilities = *
 
-# Local functions — PascalCase
+# Local functions -- PascalCase
 dotnet_naming_rule.local_functions_should_be_pascal_case.severity = warning
 dotnet_naming_rule.local_functions_should_be_pascal_case.symbols = local_functions
 dotnet_naming_rule.local_functions_should_be_pascal_case.style = pascal_case
@@ -268,7 +268,7 @@ dotnet_naming_rule.local_functions_should_be_pascal_case.style = pascal_case
 dotnet_naming_symbols.local_functions.applicable_kinds = local_function
 dotnet_naming_symbols.local_functions.applicable_accessibilities = *
 
-# Type parameters — T prefix, PascalCase
+# Type parameters -- T prefix, PascalCase
 dotnet_naming_rule.type_parameters_should_begin_with_t.severity = warning
 dotnet_naming_rule.type_parameters_should_begin_with_t.symbols = type_parameters
 dotnet_naming_rule.type_parameters_should_begin_with_t.style = begins_with_t
@@ -288,7 +288,7 @@ dotnet_naming_style.camel_case.capitalization = camel_case
 # IDE0005: Remove unnecessary using directives
 dotnet_diagnostic.IDE0005.severity = warning
 
-# IDE0011: Add braces — enforced via csharp_prefer_braces above
+# IDE0011: Add braces -- enforced via csharp_prefer_braces above
 dotnet_diagnostic.IDE0011.severity = warning
 
 # IDE0040: Accessibility modifiers required
@@ -306,26 +306,26 @@ dotnet_diagnostic.IDE0130.severity = warning
 # CA1024: Use properties where appropriate
 dotnet_diagnostic.CA1024.severity = suggestion
 
-# CA1062: Validate arguments of public methods — records handle this
+# CA1062: Validate arguments of public methods -- records handle this
 dotnet_diagnostic.CA1062.severity = none
 
-# CA1303: Do not pass literals as localised parameters — not localising yet
+# CA1303: Do not pass literals as localised parameters -- not localising yet
 dotnet_diagnostic.CA1303.severity = none
 
-# CA1308: Normalise strings to uppercase — not applicable to all cases
+# CA1308: Normalise strings to uppercase -- not applicable to all cases
 dotnet_diagnostic.CA1308.severity = suggestion
 
-# CA1515: Make types internal — WinUI XAML codegen requires public partial classes
+# CA1515: Make types internal -- WinUI XAML codegen requires public partial classes
 dotnet_diagnostic.CA1515.severity = suggestion
 
-# CA1812: Avoid uninstantiated internal classes — false positives with DI/XAML
+# CA1812: Avoid uninstantiated internal classes -- false positives with DI/XAML
 dotnet_diagnostic.CA1812.severity = suggestion
 
-# CA1848: Use the LoggerMessage delegates — not using ILogger yet
+# CA1848: Use the LoggerMessage delegates -- not using ILogger yet
 dotnet_diagnostic.CA1848.severity = suggestion
 
-# CA1034: Do not nest types — discriminated unions use nested sealed records by design (§5–§7)
+# CA1034: Do not nest types -- discriminated unions use nested sealed records by design (s5-s7)
 dotnet_diagnostic.CA1034.severity = none
 
-# CA2007: Do not directly await a Task — WinUI DispatcherQueue has a SynchronizationContext
+# CA2007: Do not directly await a Task -- WinUI DispatcherQueue has a SynchronizationContext
 dotnet_diagnostic.CA2007.severity = none

@@ -219,7 +219,7 @@ SchemaTools implements a **cascade soft-delete + reactivation guard + deferred p
 
 The `softDeleteMode` setting controls trigger behaviour per table:
 
-| Mode       | Trigger Type         | behaviour                                                                         |
+| Mode       | Trigger Type         | Behaviour                                                                         |
 | ---------- | -------------------- | --------------------------------------------------------------------------------- |
 | `cascade`  | Cascade soft-delete  | Automatically propagates `record_active=0` to all FK children (default)           |
 | `restrict` | Restrict soft-delete | Blocks soft-delete if any active children exist; requires explicit child handling |
@@ -843,6 +843,33 @@ Post-build, `Build/schema.json` is extracted from the compiled `.dacpac`:
 
 This metadata is authoritative - it reflects the actual compiled schema including all resolved references.
 
+### Category Bridging
+
+The compiled `.dacpac` model does not preserve SQL comment annotations. Table categories defined via `-- @category` in source files are parsed during the pre-build analysis phase and written to `analysis.json`. The post-build metadata extraction step reads `analysis.json` and bridges category assignments into `schema.json`, ensuring that `category` appears on each table in the final output.
+
+### Column Properties
+
+Each column in `schema.json` includes structured type decomposition alongside the opaque `type` string:
+
+| Property               | Type    | Description                                                                                 |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `type`                 | string  | Full SQL type string, e.g. `varchar(100)`, `decimal(18,2)`, `varchar(max)`                  |
+| `maxLength`            | int?    | Character/binary length for sized types (`varchar(100)` -> `100`). Null for MAX or unsized. |
+| `precision`            | int?    | Numeric precision or temporal fractional-seconds precision. Null for non-precision types.    |
+| `scale`                | int?    | Numeric scale (e.g. `decimal(18,2)` -> `2`). Null for non-numeric types.                    |
+| `isMaxLength`          | bool    | `true` for `VARCHAR(MAX)`, `NVARCHAR(MAX)`, `VARBINARY(MAX)` columns.                       |
+| `isPolymorphicForeignKey` | bool | `true` for type-discriminator and ID columns in polymorphic tables.                         |
+| `isCompositeFK`        | bool    | `true` when the column participates in a multi-column foreign key.                           |
+| `foreignKey`           | object? | `{ table, column, schema }` reference for FK columns. Set for both single and composite FKs.|
+
+### Polymorphic Column Marking
+
+When a table is detected as polymorphic (via `polymorphicPatterns` config), both the type-discriminator column and the corresponding ID column are marked with `isPolymorphicForeignKey: true`. Non-polymorphic columns on the same table remain `false`.
+
+### Composite FK Column Metadata
+
+For composite foreign keys, each participating column receives its own `foreignKey` reference mapping to the corresponding referenced column, and `isCompositeFK` is set to `true`. For single-column FKs, `isCompositeFK` remains `false`.
+
 ## Supported SQL Server Versions
 
 | Version         | `sqlServerVersion` |
@@ -852,6 +879,12 @@ This metadata is authoritative - it reflects the actual compiled schema includin
 | SQL Server 2019 | `Sql150`           |
 | SQL Server 2022 | `Sql160`           |
 | SQL Server 2025 | `Sql170` (default) |
+
+## Known DacFx Behaviours
+
+| Behaviour | Impact | Detail |
+| --- | --- | --- |
+| Temporal fractional-seconds precision not exposed via `Column.Precision` | `precision` is null for `DATETIME2(n)` / `DATETIMEOFFSET(n)` columns when DacFx uses its default precision (7). Non-default precisions (e.g. `DATETIME2(3)`) are exposed correctly. | DacFx normalises the default precision away. The `type` string (e.g. `datetimeoffset`) will also omit the suffix. Consumers should treat a null `precision` on temporal columns as the SQL Server default of 7. |
 
 ## Roadmap
 

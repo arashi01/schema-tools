@@ -2,9 +2,6 @@
 
 namespace SchemaTools.Models;
 
-/// <summary>
-/// Complete schema metadata for the entire database
-/// </summary>
 public class SchemaMetadata
 {
   [JsonPropertyName("$schema")]

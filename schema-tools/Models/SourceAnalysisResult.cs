@@ -12,41 +12,23 @@ public class SourceAnalysisResult
   public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
   public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
   public List<TableAnalysis> Tables { get; set; } = new();
-
-  /// <summary>
-  /// Column configuration used for trigger generation
-  /// </summary>
   public ColumnConfig Columns { get; set; } = new();
-
-  /// <summary>
-  /// Feature configuration flags
-  /// </summary>
   public FeatureFlags Features { get; set; } = new();
 
   /// <summary>
-  /// Existing triggers discovered in the project (for explicit-wins policy)
+  /// Existing triggers discovered in the project (for explicit-wins policy).
   /// </summary>
   public List<ExistingTrigger> ExistingTriggers { get; set; } = new();
 
   /// <summary>
-  /// Existing views discovered in the project (for explicit-wins policy)
+  /// Existing views discovered in the project (for explicit-wins policy).
   /// </summary>
   public List<ExistingView> ExistingViews { get; set; } = new();
 
-  /// <summary>
-  /// The generated triggers directory path (used to distinguish explicit vs generated)
-  /// </summary>
   public string GeneratedTriggersDirectory { get; set; } = string.Empty;
-
-  /// <summary>
-  /// The generated views directory path (used to distinguish explicit vs generated)
-  /// </summary>
   public string GeneratedViewsDirectory { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// Column configuration for code generation
-/// </summary>
 public class ColumnConfig
 {
   public string Active { get; set; } = SchemaToolsDefaults.ActiveColumn;
@@ -58,48 +40,28 @@ public class ColumnConfig
   public string ValidTo { get; set; } = SchemaToolsDefaults.ValidToColumn;
 }
 
-/// <summary>
-/// Feature flags for code generation
-/// </summary>
 public class FeatureFlags
 {
   public bool GenerateReactivationGuards { get; set; } = true;
 }
 
-/// <summary>
-/// Represents an existing trigger discovered during source analysis
-/// </summary>
 public class ExistingTrigger
 {
   public string Name { get; set; } = string.Empty;
   public string Schema { get; set; } = SchemaToolsDefaults.DefaultSchema;
   public string TargetTable { get; set; } = string.Empty;
   public string SourceFile { get; set; } = string.Empty;
-
-  /// <summary>
-  /// True if this trigger is in the _generated directory (owned by SchemaTools)
-  /// </summary>
   public bool IsGenerated { get; set; }
 }
 
-/// <summary>
-/// Represents an existing view discovered during source analysis
-/// </summary>
 public class ExistingView
 {
   public string Name { get; set; } = string.Empty;
   public string Schema { get; set; } = SchemaToolsDefaults.DefaultSchema;
   public string SourceFile { get; set; } = string.Empty;
-
-  /// <summary>
-  /// True if this view is in the _generated directory (owned by SchemaTools)
-  /// </summary>
   public bool IsGenerated { get; set; }
 }
 
-/// <summary>
-/// Analysis result for a single table - focused on code generation needs
-/// </summary>
 public class TableAnalysis
 {
   public string Name { get; set; } = string.Empty;
@@ -113,19 +75,8 @@ public class TableAnalysis
   public bool HasSoftDelete { get; set; }
   public string? ActiveColumnName { get; set; }
 
-  /// <summary>
-  /// History table for temporal versioning (e.g. "[dbo].[users_history]")
-  /// </summary>
   public string? HistoryTable { get; set; }
-
-  /// <summary>
-  /// Temporal period start column name (e.g. "valid_from")
-  /// </summary>
   public string? ValidFromColumn { get; set; }
-
-  /// <summary>
-  /// Temporal period end column name (e.g. "valid_to")
-  /// </summary>
   public string? ValidToColumn { get; set; }
 
   /// <summary>
@@ -156,9 +107,6 @@ public class TableAnalysis
   public bool IsLeafTable { get; set; }
 }
 
-/// <summary>
-/// Foreign key reference for dependency analysis
-/// </summary>
 public class ForeignKeyRef
 {
   public string ReferencedTable { get; set; } = string.Empty;

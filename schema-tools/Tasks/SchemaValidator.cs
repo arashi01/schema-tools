@@ -23,7 +23,6 @@ public class SchemaValidator : MSTask
   public bool? EnforceNamingConventions { get; set; }
   public bool? TreatWarningsAsErrors { get; set; }
 
-  // Allow injecting config and metadata for testing
   internal SchemaToolsConfig? TestConfig { get; set; }
   internal SchemaMetadata? TestMetadata { get; set; }
 
@@ -46,10 +45,8 @@ public class SchemaValidator : MSTask
           "============================================================");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, string.Empty);
 
-      // Load configuration
       LoadConfiguration();
 
-      // Load metadata
       SchemaMetadata? metadata = LoadMetadata();
       if (metadata == null)
       {
@@ -59,7 +56,6 @@ public class SchemaValidator : MSTask
       Log.LogMessage($"Validating {metadata.Tables.Count} tables...");
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, string.Empty);
 
-      // Run all validations based on config
       if (GetValidationSetting(ValidateForeignKeys, _config.Validation.ValidateForeignKeys))
         ValidateForeignKeyReferences(metadata);
 
@@ -75,13 +71,11 @@ public class SchemaValidator : MSTask
       if (GetValidationSetting(EnforceNamingConventions, _config.Validation.EnforceNamingConventions))
         ValidateNamingConventions(metadata);
 
-      // Additional validations
       ValidatePrimaryKeys(metadata);
       ValidateCircularForeignKeys(metadata);
       ValidateSoftDeleteConsistency(metadata);
       ValidateUniqueConstraints(metadata);
 
-      // Report results
       bool treatAsErrors = GetValidationSetting(TreatWarningsAsErrors, _config.Validation.TreatWarningsAsErrors);
 
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, string.Empty);
@@ -191,7 +185,6 @@ public class SchemaValidator : MSTask
     return taskParameter ?? configValue;
   }
 
-  // Make validation errors/warnings accessible for testing
   internal IReadOnlyList<string> ValidationErrors => _errors;
   internal IReadOnlyList<string> ValidationWarnings => _warnings;
 
@@ -209,7 +202,6 @@ public class SchemaValidator : MSTask
               $"{table.Name}: FK '{fk.Name}' references non-existent table '{fk.ReferencedTable}'");
         }
 
-        // Validate referenced columns exist
         TableMetadata? refTable = metadata.Tables.FirstOrDefault(t => t.Name == fk.ReferencedTable);
         if (refTable != null)
         {
@@ -223,7 +215,6 @@ public class SchemaValidator : MSTask
           }
         }
 
-        // Validate FK column count matches
         if (fk.Columns.Count != fk.ReferencedColumns.Count)
         {
           _errors.Add(
@@ -243,28 +234,24 @@ public class SchemaValidator : MSTask
         continue;
       }
 
-      // Validate type column exists
       if (!table.Columns.Any(c => c.Name == table.PolymorphicOwner.TypeColumn))
       {
         _errors.Add(
             $"{table.Name}: Polymorphic type column '{table.PolymorphicOwner.TypeColumn}' not found");
       }
 
-      // Validate id column exists
       if (!table.Columns.Any(c => c.Name == table.PolymorphicOwner.IdColumn))
       {
         _errors.Add(
             $"{table.Name}: Polymorphic id column '{table.PolymorphicOwner.IdColumn}' not found");
       }
 
-      // Validate allowed types are populated
       if (table.PolymorphicOwner.AllowedTypes == null || table.PolymorphicOwner.AllowedTypes.Count == 0)
       {
         _warnings.Add(
             $"{table.Name}: Polymorphic table has no allowed types defined in CHECK constraint");
       }
 
-      // Validate check constraint exists for type column
       string typeColumn = table.PolymorphicOwner.TypeColumn;
       bool hasCheckConstraint = table.Constraints.CheckConstraints
           .Any(c => c.Expression.Contains(typeColumn));
@@ -287,7 +274,6 @@ public class SchemaValidator : MSTask
       if (!GetValidationSetting(ValidateTemporal, effective.Validation.ValidateTemporal))
         continue;
 
-      // Validate valid_from column
       ColumnMetadata? validFrom = table.Columns.FirstOrDefault(c =>
           string.Equals(c.Name, cols.ValidFrom, StringComparison.OrdinalIgnoreCase));
       if (validFrom == null)
@@ -299,7 +285,6 @@ public class SchemaValidator : MSTask
         _errors.Add($"{table.Name}: '{cols.ValidFrom}' must be GENERATED ALWAYS AS ROW START");
       }
 
-      // Validate valid_to column
       ColumnMetadata? validTo = table.Columns.FirstOrDefault(c =>
           string.Equals(c.Name, cols.ValidTo, StringComparison.OrdinalIgnoreCase));
       if (validTo == null)
@@ -311,7 +296,6 @@ public class SchemaValidator : MSTask
         _errors.Add($"{table.Name}: '{cols.ValidTo}' must be GENERATED ALWAYS AS ROW END");
       }
 
-      // Validate history table is specified
       if (string.IsNullOrEmpty(table.HistoryTable))
       {
         _warnings.Add($"{table.Name}: Temporal table missing history table specification");
@@ -323,7 +307,6 @@ public class SchemaValidator : MSTask
   {
     ColumnNamingConfig cols = _config.Columns;
 
-    // All tables except append-only should have created_by and updated_by
     foreach (TableMetadata? table in metadata.Tables.Where(t => !t.IsAppendOnly))
     {
       SchemaToolsConfig effective = _config.ResolveForTable(table.Name, table.Category);
@@ -341,7 +324,6 @@ public class SchemaValidator : MSTask
       }
     }
 
-    // Append-only tables should have created_at but NOT updated_by
     foreach (TableMetadata? table in metadata.Tables.Where(t => t.IsAppendOnly))
     {
       SchemaToolsConfig effective = _config.ResolveForTable(table.Name, table.Category);
@@ -367,14 +349,12 @@ public class SchemaValidator : MSTask
 
     foreach (TableMetadata table in metadata.Tables)
     {
-      // Table names should be lowercase snake_case
       if (!snakeCasePattern.IsMatch(table.Name))
       {
         _warnings.Add(
             $"{table.Name}: Table name should be lowercase snake_case (e.g., 'table_name')");
       }
 
-      // Column names should be lowercase snake_case
       foreach (ColumnMetadata column in table.Columns)
       {
         if (!snakeCasePattern.IsMatch(column.Name))
@@ -384,7 +364,6 @@ public class SchemaValidator : MSTask
         }
       }
 
-      // FK constraint names should follow pattern fk_table_referenced
       foreach (ForeignKeyConstraint fk in table.Constraints.ForeignKeys)
       {
         string expectedPrefix = $"fk_{table.Name}_";
@@ -395,7 +374,6 @@ public class SchemaValidator : MSTask
         }
       }
 
-      // PK constraint names should be pk_table
       if (table.Constraints.PrimaryKey != null)
       {
         string expectedName = $"pk_{table.Name}";
@@ -441,7 +419,6 @@ public class SchemaValidator : MSTask
 
   private void ValidateCircularForeignKeys(SchemaMetadata metadata)
   {
-    // Build dependency graph
     var dependencies = new Dictionary<string, HashSet<string>>();
     foreach (TableMetadata table in metadata.Tables)
     {
@@ -456,7 +433,6 @@ public class SchemaValidator : MSTask
       }
     }
 
-    // Detect cycles
     var visited = new HashSet<string>();
     var recursionStack = new HashSet<string>();
 
@@ -507,13 +483,11 @@ public class SchemaValidator : MSTask
   {
     foreach (TableMetadata? table in metadata.Tables.Where(t => t.HasSoftDelete))
     {
-      // Must have active column
       if (!table.HasActiveColumn)
       {
         _errors.Add($"{table.Name}: Marked as HasSoftDelete but HasActiveColumn is false");
       }
 
-      // Must have temporal versioning
       if (!table.HasTemporalVersioning)
       {
         _errors.Add($"{table.Name}: Marked as HasSoftDelete but HasTemporalVersioning is false");
@@ -531,7 +505,6 @@ public class SchemaValidator : MSTask
     {
       foreach (UniqueConstraint constraint in table.Constraints.UniqueConstraints)
       {
-        // Validate all columns exist
         foreach (string columnName in constraint.Columns)
         {
           if (!table.Columns.Any(c => c.Name == columnName))

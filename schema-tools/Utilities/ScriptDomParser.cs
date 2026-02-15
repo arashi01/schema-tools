@@ -91,7 +91,6 @@ public static class ScriptDomParser
         continue;
       }
 
-      // Search table-level constraints
       foreach (ConstraintDefinition constraint in createTable.Definition.TableConstraints)
       {
         if (constraint is CheckConstraintDefinition check
@@ -101,7 +100,6 @@ public static class ScriptDomParser
         }
       }
 
-      // Search column-level constraints
       foreach (ColumnDefinition col in createTable.Definition.ColumnDefinitions)
       {
         foreach (ConstraintDefinition constraint in col.Constraints)

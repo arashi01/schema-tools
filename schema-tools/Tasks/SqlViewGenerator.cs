@@ -53,7 +53,6 @@ public class SqlViewGenerator : MSTask
   /// </summary>
   public bool Force { get; set; }
 
-  // Testing support
   internal SourceAnalysisResult? TestAnalysis { get; set; }
 
   public override bool Execute()
@@ -67,7 +66,6 @@ public class SqlViewGenerator : MSTask
 
       SourceAnalysisResult analysis = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
 
-      // Find all soft-delete tables (excluding Ignore mode)
       var softDeleteTables = analysis.Tables
         .Where(t => t.HasSoftDelete && t.SoftDeleteMode != SoftDeleteMode.Ignore)
         .ToList();
@@ -92,7 +90,6 @@ public class SqlViewGenerator : MSTask
       int skippedExplicit = 0;
       int skippedExists = 0;
 
-      // Generate active-record views
       Log.LogMessage(MessageImportance.High, string.Empty);
       Log.LogMessage(MessageImportance.High, "Generating active-record views:");
 
@@ -111,7 +108,6 @@ public class SqlViewGenerator : MSTask
           continue;
         }
 
-        // Check if exists and Force not set
         if (File.Exists(filePath) && !Force)
         {
           Log.LogMessage(MessageImportance.Low, $"  Skipped {viewName}: Already exists");
@@ -125,7 +121,6 @@ public class SqlViewGenerator : MSTask
         activeGenerated++;
       }
 
-      // Generate deleted-record views if enabled
       if (IncludeDeletedViews)
       {
         Log.LogMessage(MessageImportance.High, string.Empty);
@@ -160,7 +155,6 @@ public class SqlViewGenerator : MSTask
         }
       }
 
-      // Summary
       Log.LogMessage(MessageImportance.High, string.Empty);
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, "  Summary");
