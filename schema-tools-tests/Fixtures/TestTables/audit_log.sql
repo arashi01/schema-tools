@@ -10,7 +10,7 @@ CREATE TABLE [test].[audit_log]
         CONSTRAINT [ck_audit_log_action]
         CHECK ([action] IN ('create', 'update', 'delete')),
     [payload] VARCHAR(MAX) NULL,
-    [created_at] DATETIMEOFFSET(7) NOT NULL DEFAULT SYSUTCDATETIME(),
+    [record_created_at] DATETIMEOFFSET(7) NOT NULL DEFAULT SYSUTCDATETIME(),
 
     CONSTRAINT [pk_audit_log] PRIMARY KEY CLUSTERED ([id]),
     CONSTRAINT [fk_audit_log_entity] FOREIGN KEY ([entity_id])

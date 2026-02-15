@@ -8,7 +8,7 @@ namespace SchemaTools.Models;
 public class SchemaMetadata
 {
   [JsonPropertyName("$schema")]
-  public string Schema { get; set; } = "./schema-metadata.schema.json";
+  public string Schema { get; set; } = "./schema.schema.json";
 
   [JsonPropertyName("version")]
   public string Version { get; set; } = SchemaToolsDefaults.MetadataVersion;

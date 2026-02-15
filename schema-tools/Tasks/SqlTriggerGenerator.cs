@@ -1,7 +1,7 @@
 ﻿using System.Text;
-using System.Text.Json;
 using Microsoft.Build.Framework;
 using SchemaTools.Models;
+using SchemaTools.Utilities;
 using MSTask = Microsoft.Build.Utilities.Task;
 
 namespace SchemaTools.Tasks;
@@ -63,7 +63,7 @@ public class SqlTriggerGenerator : MSTask
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, string.Empty);
 
-      SourceAnalysisResult analysis = LoadAnalysis();
+      SourceAnalysisResult analysis = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
 
       // Build lookup for table details
       var tableLookup = analysis.Tables.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
@@ -278,32 +278,7 @@ public class SqlTriggerGenerator : MSTask
     }
   }
 
-  private SourceAnalysisResult LoadAnalysis()
-  {
-    if (TestAnalysis != null)
-    {
-      Log.LogMessage("Using injected test analysis");
-      return TestAnalysis;
-    }
 
-    if (!File.Exists(AnalysisFile))
-    {
-      throw new FileNotFoundException($"Analysis file not found: {AnalysisFile}");
-    }
-
-    string json = File.ReadAllText(AnalysisFile);
-    SourceAnalysisResult? analysis = JsonSerializer.Deserialize<SourceAnalysisResult>(json, new JsonSerializerOptions
-    {
-      PropertyNameCaseInsensitive = true
-    });
-
-    if (analysis == null || analysis.Tables == null)
-    {
-      throw new InvalidOperationException("Failed to deserialize analysis file");
-    }
-
-    return analysis;
-  }
 
   #region Helper Methods for Multi-Column Key Support
 

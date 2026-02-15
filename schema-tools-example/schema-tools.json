@@ -1,4 +1,4 @@
-{
+﻿{
   "database": "SchemaToolsExample",
   "defaultSchema": "dbo",
   "sqlServerVersion": "Sql170",
@@ -28,7 +28,7 @@
     "includeErDiagrams": true,
     "includeStatistics": true,
     "includeConstraints": true,
-    "includeIndexes": false
+    "includeIndexes": true
   },
 
   "purge": {
@@ -51,6 +51,20 @@
     "audit": "Append-only audit and logging tables"
   },
 
+  "columns": {
+    "active": "record_active",
+    "createdAt": "record_created_at",
+    "createdBy": "record_created_by",
+    "updatedBy": "record_updated_by",
+    "updatedByType": "UNIQUEIDENTIFIER",
+    "validFrom": "record_valid_from",
+    "validTo": "record_valid_until",
+    "auditForeignKeyTable": "users",
+    "polymorphicPatterns": [
+      { "typeColumn": "owner_type", "idColumn": "owner_id" }
+    ]
+  },
+
   "overrides": {
     "organisations": {
       "features": {
@@ -60,6 +74,17 @@
     "users": {
       "features": {
         "reactivationCascade": true
+      }
+    },
+    "category:audit": {
+      "validation": {
+        "validateAuditColumns": false,
+        "validateTemporal": false
+      }
+    },
+    "event_*": {
+      "validation": {
+        "enforceNamingConventions": false
       }
     }
   }

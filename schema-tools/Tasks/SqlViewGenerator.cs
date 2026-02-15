@@ -1,7 +1,7 @@
 ﻿using System.Text;
-using System.Text.Json;
 using Microsoft.Build.Framework;
 using SchemaTools.Models;
+using SchemaTools.Utilities;
 using MSTask = Microsoft.Build.Utilities.Task;
 
 namespace SchemaTools.Tasks;
@@ -65,7 +65,7 @@ public class SqlViewGenerator : MSTask
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, string.Empty);
 
-      SourceAnalysisResult analysis = LoadAnalysis();
+      SourceAnalysisResult analysis = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
 
       // Find all soft-delete tables (excluding Ignore mode)
       var softDeleteTables = analysis.Tables
@@ -185,32 +185,7 @@ public class SqlViewGenerator : MSTask
     }
   }
 
-  private SourceAnalysisResult LoadAnalysis()
-  {
-    if (TestAnalysis != null)
-    {
-      Log.LogMessage("Using injected test analysis");
-      return TestAnalysis;
-    }
 
-    if (!File.Exists(AnalysisFile))
-    {
-      throw new FileNotFoundException($"Analysis file not found: {AnalysisFile}");
-    }
-
-    string json = File.ReadAllText(AnalysisFile);
-    SourceAnalysisResult? analysis = JsonSerializer.Deserialize<SourceAnalysisResult>(json, new JsonSerializerOptions
-    {
-      PropertyNameCaseInsensitive = true
-    });
-
-    if (analysis == null || analysis.Tables == null)
-    {
-      throw new InvalidOperationException("Failed to deserialize analysis file");
-    }
-
-    return analysis;
-  }
 
   private static string GenerateActiveView(TableAnalysis table, string viewName, ColumnConfig columns)
   {

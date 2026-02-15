@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Build.Framework;
 using Microsoft.SqlServer.Dac.Model;
 using SchemaTools.Models;
+using SchemaTools.Utilities;
 // DacFx type aliases (disambiguate from SchemaTools.Models types)
 using DacCheckConstraint = Microsoft.SqlServer.Dac.Model.CheckConstraint;
 using DacColumnStoreIndex = Microsoft.SqlServer.Dac.Model.ColumnStoreIndex;
@@ -52,6 +53,7 @@ public class SchemaMetadataExtractor : MSTask
   internal TSqlModel? TestModel { get; set; }
 
   private SchemaToolsConfig _config = new();
+  private string _sqlVersion = "Sql170";
 
   public override bool Execute()
   {
@@ -66,6 +68,7 @@ public class SchemaMetadataExtractor : MSTask
 
       // Load the compiled model
       TSqlModel model = LoadModel();
+      _sqlVersion = GetSqlServerVersion(model);
 
       Log.LogMessage(MessageImportance.High, $"Extracting metadata from: {Path.GetFileName(DacpacPath)}");
 
@@ -106,7 +109,7 @@ public class SchemaMetadataExtractor : MSTask
       // Detect patterns using config
       foreach (TableMetadata table in metadata.Tables)
       {
-        DetectTablePatterns(table, _config);
+        DetectTablePatterns(table, _config, _sqlVersion);
       }
 
       // Calculate statistics
@@ -213,11 +216,29 @@ public class SchemaMetadataExtractor : MSTask
       Schema = schema
     };
 
+    // Cache table script once for script-based fallbacks
+    // (computed column expressions, FK actions, check constraints)
+    string? tableScript = null;
+    try
+    {
+      tableScript = table.GetScript();
+    }
+    catch
+    {
+      // Script not available
+    }
+
+    // Pre-parse computed columns from table script via ScriptDom
+    // (DacFx Column.Expression is a SqlScriptProperty that throws InvalidCastException)
+    Dictionary<string, ScriptDomParser.ComputedColumnInfo> computedColumns = !string.IsNullOrWhiteSpace(tableScript)
+      ? ScriptDomParser.ExtractAllComputedColumns(tableScript, _sqlVersion)
+      : new Dictionary<string, ScriptDomParser.ComputedColumnInfo>(StringComparer.OrdinalIgnoreCase);
+
     // Extract columns
     IEnumerable<TSqlObject> columns = table.GetReferenced(Table.Columns);
     foreach (TSqlObject column in columns)
     {
-      ColumnMetadata colMeta = ExtractColumnMetadata(column);
+      ColumnMetadata colMeta = ExtractColumnMetadata(column, computedColumns);
       metadata.Columns.Add(colMeta);
 
       // Check for active column
@@ -286,15 +307,50 @@ public class SchemaMetadataExtractor : MSTask
         string refSchema = refTableName.Parts.Count > 1 ? refTableName.Parts[0] : _config.DefaultSchema;
         string refName = refTableName.Parts.Count > 1 ? refTableName.Parts[1] : refTableName.Parts[0];
 
+        string fkName = fk.Name.Parts.LastOrDefault() ?? $"FK_{name}";
+        string onDelete = NormaliseFKAction(SafeGetProperty<ForeignKeyAction?>(fk, DacFKConstraint.DeleteAction)?.ToString());
+        string onUpdate = NormaliseFKAction(SafeGetProperty<ForeignKeyAction?>(fk, DacFKConstraint.UpdateAction)?.ToString());
+
+        // Script-based fallback for FK actions when DacFx property access returns the default
+        if (onDelete == "NoAction" || onUpdate == "NoAction")
+        {
+          // Try FK constraint's own script first, then the table script
+          string? fkScript = null;
+          try
+          {
+            fkScript = fk.GetScript();
+          }
+          catch
+          {
+            // Script not available
+          }
+
+          ScriptDomParser.ForeignKeyActionInfo actions = !string.IsNullOrWhiteSpace(fkScript)
+            ? ScriptDomParser.ExtractFKActions(fkScript, _sqlVersion)
+            : !string.IsNullOrWhiteSpace(tableScript)
+              ? ScriptDomParser.ExtractFKActionsByName(tableScript, fkName, _sqlVersion)
+              : new ScriptDomParser.ForeignKeyActionInfo();
+
+          if (onDelete == "NoAction" && actions.OnDelete != "NoAction")
+          {
+            onDelete = actions.OnDelete;
+          }
+
+          if (onUpdate == "NoAction" && actions.OnUpdate != "NoAction")
+          {
+            onUpdate = actions.OnUpdate;
+          }
+        }
+
         metadata.Constraints.ForeignKeys.Add(new ModelFKConstraint
         {
-          Name = fk.Name.Parts.LastOrDefault() ?? $"FK_{name}",
+          Name = fkName,
           Columns = fkColumns.Select(c => c.Name.Parts.LastOrDefault() ?? "").ToList(),
           ReferencedTable = refName,
           ReferencedSchema = refSchema,
           ReferencedColumns = refColumns.Select(c => c.Name.Parts.LastOrDefault() ?? "").ToList(),
-          OnDelete = SafeGetProperty<ForeignKeyAction?>(fk, DacFKConstraint.DeleteAction)?.ToString() ?? "NoAction",
-          OnUpdate = SafeGetProperty<ForeignKeyAction?>(fk, DacFKConstraint.UpdateAction)?.ToString() ?? "NoAction"
+          OnDelete = onDelete,
+          OnUpdate = onUpdate
         });
       }
     }
@@ -316,12 +372,31 @@ public class SchemaMetadataExtractor : MSTask
     IEnumerable<TSqlObject> checkConstraints = table.GetReferencing(DacCheckConstraint.Host);
     foreach (TSqlObject cc in checkConstraints)
     {
-      // CheckConstraint.Expression is a SqlScriptProperty internally in DacFx,
-      // which cannot be accessed via any GetProperty overload (the internal
-      // HeapPropertyHolderData always routes through a generic path that fails
-      // with an InvalidCastException). Instead, generate the full constraint
-      // script via GetScript() and parse out the expression.
-      string expression = ExtractExpressionViaScript(cc);
+      // CheckConstraint.Expression is a SqlScriptProperty in DacFx
+      // which throws InvalidCastException via GetProperty. Use GetScript() + ScriptDom parsing.
+      string expression = "";
+      try
+      {
+        string? ccScript = cc.GetScript();
+        if (!string.IsNullOrWhiteSpace(ccScript))
+        {
+          expression = ScriptDomParser.ExtractCheckExpression(ccScript, _sqlVersion) ?? "";
+        }
+      }
+      catch
+      {
+        // GetScript() may fail for certain constraint configurations
+      }
+
+      if (string.IsNullOrEmpty(expression))
+      {
+        // Fallback: extract from the cached table script by constraint name
+        string constraintName = cc.Name.Parts.LastOrDefault() ?? "";
+        if (!string.IsNullOrWhiteSpace(tableScript) && !string.IsNullOrEmpty(constraintName))
+        {
+          expression = ScriptDomParser.ExtractCheckExpressionByName(tableScript, constraintName, _sqlVersion) ?? "";
+        }
+      }
 
       metadata.Constraints.CheckConstraints.Add(new ModelCheckConstraint
       {
@@ -349,156 +424,8 @@ public class SchemaMetadataExtractor : MSTask
     return metadata;
   }
 
-  /// <summary>
-  /// Extracts the CHECK expression from a constraint object by generating
-  /// its T-SQL script and parsing out the expression portion. This avoids
-  /// calling GetProperty on SqlScriptProperty-typed properties, which
-  /// throws in the DacFx model storage engine.
-  /// </summary>
-  private static string ExtractExpressionViaScript(TSqlObject constraintObject)
-  {
-    try
-    {
-      string? script = constraintObject.GetScript();
-      if (!string.IsNullOrWhiteSpace(script))
-      {
-        string? expression = ExtractCheckExpression(script);
-        if (!string.IsNullOrEmpty(expression))
-        {
-          return expression!;
-        }
-      }
-    }
-    catch
-    {
-      // GetScript() may fail for certain constraint configurations.
-    }
-
-    return "";
-  }
-
-  /// <summary>
-  /// Extracts the CHECK expression from a full constraint script.
-  /// Input example: "ALTER TABLE ... ADD CONSTRAINT ... CHECK ([action] IN ('create','update'))"
-  /// Returns: "([action] IN ('create','update'))"
-  /// </summary>
-  private static string? ExtractCheckExpression(string? script)
-  {
-    if (string.IsNullOrWhiteSpace(script))
-      return null;
-
-    int checkIndex = script!.IndexOf("CHECK", StringComparison.OrdinalIgnoreCase);
-    if (checkIndex < 0)
-      return null;
-
-    // Move past "CHECK" keyword
-    int exprStart = checkIndex + 5;
-    // Skip whitespace
-    while (exprStart < script.Length && char.IsWhiteSpace(script[exprStart]))
-      exprStart++;
-
-    if (exprStart >= script.Length)
-      return null;
-
-#if NETSTANDARD2_0
-    return script.Substring(exprStart).TrimEnd();
-#else
-    return script[exprStart..].TrimEnd();
-#endif
-  }
-
-  /// <summary>
-  /// Extracts the DEFAULT expression from a default constraint script.
-  /// Input example: "ALTER TABLE [dbo].[t] ADD DEFAULT ((0)) FOR [col]"
-  /// Returns: "((0))"
-  /// </summary>
-  private static string ExtractDefaultExpressionViaScript(TSqlObject defaultConstraint)
-  {
-    try
-    {
-      string? script = defaultConstraint.GetScript();
-      if (!string.IsNullOrWhiteSpace(script))
-      {
-        string? expression = ExtractDefaultExpression(script!);
-        if (!string.IsNullOrEmpty(expression))
-        {
-          return expression!;
-        }
-      }
-    }
-    catch
-    {
-      // GetScript() may fail for certain default configurations.
-    }
-
-    return "";
-  }
-
-  /// <summary>
-  /// Extracts the DEFAULT expression from a full constraint script.
-  /// Handles both named and unnamed defaults:
-  ///   "ALTER TABLE ... ADD CONSTRAINT ... DEFAULT (expr) FOR [col]"
-  ///   "ALTER TABLE ... ADD DEFAULT (expr) FOR [col]"
-  /// </summary>
-  private static string? ExtractDefaultExpression(string script)
-  {
-    int defaultIndex = script.IndexOf("DEFAULT", StringComparison.OrdinalIgnoreCase);
-    if (defaultIndex < 0)
-    {
-      return null;
-    }
-
-    int exprStart = defaultIndex + 7;
-    while (exprStart < script.Length && char.IsWhiteSpace(script[exprStart]))
-    {
-      exprStart++;
-    }
-
-    if (exprStart >= script.Length)
-    {
-      return null;
-    }
-
-    // Find " FOR " to mark the end of the expression
-    int forIndex = script.LastIndexOf(" FOR ", StringComparison.OrdinalIgnoreCase);
-    if (forIndex > exprStart)
-    {
-#if NETSTANDARD2_0
-      return script.Substring(exprStart, forIndex - exprStart).Trim();
-#else
-      return script[exprStart..forIndex].Trim();
-#endif
-    }
-
-    // No FOR clause - expression extends to end of script
-#if NETSTANDARD2_0
-    return script.Substring(exprStart).TrimEnd();
-#else
-    return script[exprStart..].TrimEnd();
-#endif
-  }
-
-  /// <summary>
-  /// Extracts the WHERE filter clause from an index creation script.
-  /// Input example: "CREATE ... INDEX ... ON ... WHERE ([active] = 1)"
-  /// Returns: "WHERE ([active] = 1)"
-  /// </summary>
-  private static string? ExtractFilterClause(string script)
-  {
-    int whereIndex = script.LastIndexOf("WHERE", StringComparison.OrdinalIgnoreCase);
-    if (whereIndex < 0)
-    {
-      return null;
-    }
-
-#if NETSTANDARD2_0
-    return script.Substring(whereIndex).TrimEnd();
-#else
-    return script[whereIndex..].TrimEnd();
-#endif
-  }
-
-  private ColumnMetadata ExtractColumnMetadata(TSqlObject column)
+  private ColumnMetadata ExtractColumnMetadata(
+    TSqlObject column, Dictionary<string, ScriptDomParser.ComputedColumnInfo> computedColumns)
   {
     string name = column.Name.Parts.LastOrDefault() ?? "";
 
@@ -523,7 +450,7 @@ public class SchemaMetadataExtractor : MSTask
       typeStr = scale.HasValue && scale > 0 ? $"{typeName}({precision},{scale})" : $"{typeName}({precision})";
     }
 
-    // Computed column detection
+    // Computed column detection -- use pre-parsed ScriptDom data, with DacFx property as primary attempt
     bool isComputed = false;
     string? computedExpression = null;
     bool isPersisted = false;
@@ -531,7 +458,6 @@ public class SchemaMetadataExtractor : MSTask
     try
     {
       // Column.Expression is a SqlScriptProperty in DacFx - may throw InvalidCastException.
-      // If it succeeds and returns a non-empty value, the column is computed.
       string? expression = column.GetProperty<string>(Column.Expression);
       if (!string.IsNullOrEmpty(expression))
       {
@@ -541,22 +467,16 @@ public class SchemaMetadataExtractor : MSTask
     }
     catch
     {
-      // SqlScriptProperty - fall back to ColumnType metadata check
-      try
+      // SqlScriptProperty -- fall back to ScriptDom-parsed data
+      if (computedColumns.TryGetValue(name, out ScriptDomParser.ComputedColumnInfo? info))
       {
-        object? columnType = column.GetMetadata(Column.ColumnType);
-        if (columnType != null && columnType.ToString()!.Contains("Computed"))
-        {
-          isComputed = true;
-        }
-      }
-      catch
-      {
-        // Metadata not available
+        isComputed = true;
+        computedExpression = info.Expression;
+        isPersisted = info.IsPersisted;
       }
     }
 
-    if (isComputed)
+    if (isComputed && !isPersisted)
     {
       try
       {
@@ -564,7 +484,7 @@ public class SchemaMetadataExtractor : MSTask
       }
       catch
       {
-        // Persisted property not accessible
+        // Persisted property not accessible -- ScriptDom value already set above
       }
     }
 
@@ -639,10 +559,22 @@ public class SchemaMetadataExtractor : MSTask
 
       col.DefaultConstraintName = dc.Name.Parts.LastOrDefault();
 
-      // Try GetScript() first (works for ALTER TABLE ADD CONSTRAINT style)
-      string expression = ExtractDefaultExpressionViaScript(dc);
+      // DefaultConstraint.Expression is a SqlScriptProperty -- use GetScript() + ScriptDom parsing
+      string expression = "";
+      try
+      {
+        string? dcScript = dc.GetScript();
+        if (!string.IsNullOrWhiteSpace(dcScript))
+        {
+          expression = ScriptDomParser.ExtractDefaultExpression(dcScript, _sqlVersion) ?? "";
+        }
+      }
+      catch
+      {
+        // GetScript() may fail
+      }
 
-      // If GetScript() failed, try direct property access (may throw for SqlScriptProperty)
+      // Direct property access fallback (may throw for SqlScriptProperty)
       if (string.IsNullOrEmpty(expression))
       {
         try
@@ -711,13 +643,13 @@ public class SchemaMetadataExtractor : MSTask
       }
       catch
       {
-        // FilterPredicate is a SqlScriptProperty - extract from script
+        // FilterPredicate is a SqlScriptProperty -- use GetScript() + ScriptDom parsing
         try
         {
           string? script = index.GetScript();
           if (!string.IsNullOrWhiteSpace(script))
           {
-            string? filter = ExtractFilterClause(script!);
+            string? filter = ScriptDomParser.ExtractFilterClause(script, _sqlVersion);
             if (!string.IsNullOrEmpty(filter))
             {
               indexMeta.FilterClause = filter;
@@ -744,6 +676,7 @@ public class SchemaMetadataExtractor : MSTask
         Name = csIndex.Name.Parts.LastOrDefault() ?? "CCI_Unknown",
         IsUnique = false,
         IsClustered = SafeGetProperty<bool>(csIndex, DacColumnStoreIndex.Clustered),
+        IsColumnStore = true,
         Columns = csColumns.Select(c => new IndexColumn
         {
           Name = c.Name.Parts.LastOrDefault() ?? "",
@@ -823,7 +756,7 @@ public class SchemaMetadataExtractor : MSTask
     }
   }
 
-  private static void DetectTablePatterns(TableMetadata table, SchemaToolsConfig config)
+  private static void DetectTablePatterns(TableMetadata table, SchemaToolsConfig config, string sqlVersion)
   {
     SchemaToolsConfig effective = config.ResolveForTable(table.Name, table.Category);
 
@@ -855,8 +788,8 @@ public class SchemaMetadataExtractor : MSTask
       }
     }
 
-    // Polymorphic detection
-    if (effective.Features.DetectPolymorphicPatterns)
+    // Polymorphic detection (skip history tables -- they inherit columns but lack CHECK constraints)
+    if (effective.Features.DetectPolymorphicPatterns && !table.IsHistoryTable)
     {
       foreach (PolymorphicPatternConfig pattern in effective.Columns.PolymorphicPatterns)
       {
@@ -871,12 +804,45 @@ public class SchemaMetadataExtractor : MSTask
           table.PolymorphicOwner = new PolymorphicOwnerInfo
           {
             TypeColumn = pattern.TypeColumn,
-            IdColumn = pattern.IdColumn
+            IdColumn = pattern.IdColumn,
+            AllowedTypes = ExtractAllowedTypesForPolymorphic(table, pattern.TypeColumn, sqlVersion)
           };
           break;
         }
       }
     }
+  }
+
+  /// <summary>
+  /// Extracts allowed polymorphic types from CHECK constraints that reference
+  /// the given type column. Uses ScriptDom AST parsing to reliably extract
+  /// string literals from IN-list expressions.
+  /// </summary>
+  private static List<string> ExtractAllowedTypesForPolymorphic(
+    TableMetadata table, string typeColumn, string sqlVersion)
+  {
+    List<string> types = new List<string>();
+
+    foreach (ModelCheckConstraint cc in table.Constraints.CheckConstraints)
+    {
+      if (string.IsNullOrEmpty(cc.Expression))
+      {
+        continue;
+      }
+
+      // Check if this constraint references the type column (with or without brackets)
+      if (cc.Expression.IndexOf(typeColumn, StringComparison.OrdinalIgnoreCase) < 0
+          && cc.Expression.IndexOf($"[{typeColumn}]", StringComparison.OrdinalIgnoreCase) < 0)
+      {
+        continue;
+      }
+
+      // Use ScriptDom to reliably extract string literals from the expression
+      List<string> extracted = ScriptDomParser.ExtractAllowedTypesFromExpression(cc.Expression, sqlVersion);
+      types.AddRange(extracted);
+    }
+
+    return types;
   }
 
   /// <summary>
@@ -918,6 +884,21 @@ public class SchemaMetadataExtractor : MSTask
   {
     SqlServerVersion version = model.Version;
     return version.ToString();
+  }
+
+  /// <summary>
+  /// Normalises a DacFx ForeignKeyAction string. Maps null and "NotSpecified"
+  /// to "NoAction" since SQL Server defaults to NO ACTION when unspecified.
+  /// </summary>
+  private static string NormaliseFKAction(string? action)
+  {
+    if (string.IsNullOrEmpty(action) ||
+        string.Equals(action, "NotSpecified", StringComparison.OrdinalIgnoreCase))
+    {
+      return "NoAction";
+    }
+
+    return action!;
   }
 
   private static string GetAssemblyVersion()

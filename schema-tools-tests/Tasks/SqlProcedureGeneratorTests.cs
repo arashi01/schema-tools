@@ -71,10 +71,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "users",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[users_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"]
         }
       ]
@@ -110,10 +110,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "orders",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[orders_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"],
           ChildTables = ["order_items"]  // Has children - processed last
         },
@@ -122,10 +122,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "order_items",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[order_items_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"],
           IsLeafTable = true,
           ChildTables = []  // Leaf - processed first
@@ -161,10 +161,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "table_a",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HasTemporalVersioning = true,
           HistoryTable = "[dbo].[table_a_history]",
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"],
           ChildTables = ["table_b"]
         },
@@ -173,10 +173,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "table_b",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HasTemporalVersioning = true,
           HistoryTable = "[dbo].[table_b_history]",
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"],
           ChildTables = ["table_a"]  // Circular back to table_a
         }
@@ -204,10 +204,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "legacy_table",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HasTemporalVersioning = false,
           HistoryTable = null,  // No history table
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"]
         }
       ]
@@ -240,7 +240,7 @@ public class SqlProcedureGeneratorTests : IDisposable
           ActiveColumnName = "is_active",  // Custom column name
           HistoryTable = "[dbo].[custom_table_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"]
         }
       ]
@@ -268,10 +268,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "composite_pk",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[composite_pk_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["tenant_id", "entity_id"]  // Composite PK
         }
       ]
@@ -298,10 +298,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "test_table",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[test_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"]
         }
       ]
@@ -334,10 +334,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "test",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[test_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"]
         }
       ]
@@ -369,10 +369,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "test",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[test_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"]
         }
       ]
@@ -400,10 +400,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "test",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[test_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"]
         }
       ]
@@ -451,10 +451,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "parent",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[parent_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"],
           ChildTables = ["child"]
         },
@@ -463,10 +463,10 @@ public class SqlProcedureGeneratorTests : IDisposable
           Name = "child",
           Schema = "dbo",
           HasSoftDelete = true,
-          ActiveColumnName = "active",
+          ActiveColumnName = "record_active",
           HistoryTable = "[dbo].[child_history]",
           HasTemporalVersioning = true,
-          ValidToColumn = "valid_to",
+          ValidToColumn = "record_valid_until",
           PrimaryKeyColumns = ["id"],
           IsLeafTable = true
         }

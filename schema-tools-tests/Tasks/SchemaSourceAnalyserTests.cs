@@ -107,12 +107,12 @@ CREATE TABLE [dbo].[documents]
 (
     [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
     [title] NVARCHAR(500) NOT NULL,
-    [active] BIT NOT NULL DEFAULT 1,
-    [created_by] UNIQUEIDENTIFIER NOT NULL,
-    [updated_by] UNIQUEIDENTIFIER NOT NULL,
-    [valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to])
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_created_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_updated_by] UNIQUEIDENTIFIER NOT NULL,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
 )
 WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[documents_history]));
 ");
@@ -127,7 +127,7 @@ WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[documents_history]));
     table.HasSoftDelete.Should().BeTrue();
     table.HasActiveColumn.Should().BeTrue();
     table.HasTemporalVersioning.Should().BeTrue();
-    table.ActiveColumnName.Should().Be("active");
+    table.ActiveColumnName.Should().Be("record_active");
     table.HistoryTable.Should().Be("[dbo].[documents_history]");
     table.Category.Should().Be("core");
   }
@@ -139,7 +139,7 @@ WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[documents_history]));
 CREATE TABLE [dbo].[partial]
 (
     [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-    [active] BIT NOT NULL DEFAULT 1
+    [record_active] BIT NOT NULL DEFAULT 1
 );
 ");
 
@@ -161,9 +161,9 @@ CREATE TABLE [dbo].[partial]
 CREATE TABLE [dbo].[temporal]
 (
     [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-    [valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to])
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
 )
 WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[temporal_history]));
 ");
@@ -248,10 +248,10 @@ CREATE TABLE [dbo].[orders]
 (
     [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
     [customer_id] UNIQUEIDENTIFIER NOT NULL,
-    [active] BIT NOT NULL DEFAULT 1,
-    [valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to])
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
 )
 WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[orders_history]));
 ");
@@ -261,10 +261,10 @@ CREATE TABLE [dbo].[order_items]
 (
     [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
     [order_id] UNIQUEIDENTIFIER NOT NULL,
-    [active] BIT NOT NULL DEFAULT 1,
-    [valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to]),
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until]),
     CONSTRAINT [fk_items_order] FOREIGN KEY ([order_id]) REFERENCES [dbo].[orders]([id])
 )
 WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[order_items_history]));
@@ -299,10 +299,10 @@ WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[order_items_history]));
 CREATE TABLE [dbo].[leaf]
 (
     [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-    [active] BIT NOT NULL DEFAULT 1,
-    [valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to])
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
 )
 WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[leaf_history]));
 ");
@@ -324,9 +324,9 @@ CREATE TABLE [dbo].[custom_active]
 (
     [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
     [is_enabled] BIT NOT NULL DEFAULT 1,
-    [valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to])
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
 )
 WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[custom_active_history]));
 ");
@@ -357,10 +357,10 @@ WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[custom_active_history]));
 CREATE TABLE [dbo].[soft_delete]
 (
     [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-    [active] BIT NOT NULL DEFAULT 1,
-    [valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to])
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
 )
 WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[soft_delete_history]));
 ");
@@ -491,10 +491,10 @@ CREATE TABLE [dbo].[table3]([id] UNIQUEIDENTIFIER PRIMARY KEY);
 CREATE TABLE [dbo].[cascade]
 (
     [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-    [active] BIT NOT NULL DEFAULT 1,
-    [valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to])
+    [record_active] BIT NOT NULL DEFAULT 1,
+    [record_valid_from] DATETIME2(7) GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until] DATETIME2(7) GENERATED ALWAYS AS ROW END NOT NULL,
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until])
 )
 WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = [dbo].[cascade_history]));
 ");
@@ -558,6 +558,106 @@ CREATE TABLE [dbo].[valid]([id] UNIQUEIDENTIFIER PRIMARY KEY);
 
     SourceAnalysisResult? analysis = ReadAnalysisResult();
     analysis!.Tables.Should().ContainSingle(t => t.Name == "valid");
+  }
+
+  // --- Temp table filtering -------------------------------------------------
+
+  [Fact]
+  public void Execute_TempTableInScript_ExcludedFromResults()
+  {
+    // Stored procedure scripts may contain CREATE TABLE #temp statements
+    // that should not appear in the analysis output
+    CreateTableFile("proc_with_temp.sql", @"
+CREATE PROCEDURE [dbo].[usp_purge_soft_deleted]
+AS
+BEGIN
+    CREATE TABLE #purge_results
+    (
+        [table_name] NVARCHAR(128),
+        [rows_deleted] INT
+    );
+END;
+");
+    CreateTableFile("real_table.sql", @"
+CREATE TABLE [dbo].[real_table]([id] UNIQUEIDENTIFIER PRIMARY KEY);
+");
+
+    SchemaSourceAnalyser analyser = CreateAnalyser();
+    analyser.Execute();
+
+    SourceAnalysisResult? analysis = ReadAnalysisResult();
+    analysis!.Tables.Should().ContainSingle();
+    analysis.Tables[0].Name.Should().Be("real_table");
+  }
+
+  [Fact]
+  public void Execute_GlobalTempTable_ExcludedFromResults()
+  {
+    CreateTableFile("global_temp.sql", @"
+CREATE TABLE ##global_temp
+(
+    [id] INT NOT NULL
+);
+");
+
+    SchemaSourceAnalyser analyser = CreateAnalyser();
+    analyser.Execute();
+
+    SourceAnalysisResult? analysis = ReadAnalysisResult();
+    analysis!.Tables.Should().BeEmpty();
+  }
+
+  // --- FK action normalisation ----------------------------------------------
+
+  [Fact]
+  public void Execute_ForeignKeyWithCascade_OutputsCascade()
+  {
+    CreateTableFile("parent.sql", @"
+CREATE TABLE [dbo].[parent]([id] UNIQUEIDENTIFIER PRIMARY KEY);
+");
+    CreateTableFile("child.sql", @"
+CREATE TABLE [dbo].[child]
+(
+    [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+    [parent_id] UNIQUEIDENTIFIER NOT NULL,
+    CONSTRAINT [fk_child_parent] FOREIGN KEY ([parent_id])
+        REFERENCES [dbo].[parent]([id]) ON DELETE CASCADE
+);
+");
+
+    SchemaSourceAnalyser analyser = CreateAnalyser();
+    analyser.Execute();
+
+    SourceAnalysisResult? analysis = ReadAnalysisResult();
+    TableAnalysis child = analysis!.Tables.Single(t => t.Name == "child");
+    child.ForeignKeyReferences.Should().ContainSingle()
+      .Which.OnDelete.Should().Be("Cascade");
+  }
+
+  [Fact]
+  public void Execute_ForeignKeyWithNoAction_OutputsNoAction()
+  {
+    CreateTableFile("parent.sql", @"
+CREATE TABLE [dbo].[parent]([id] UNIQUEIDENTIFIER PRIMARY KEY);
+");
+    CreateTableFile("child.sql", @"
+CREATE TABLE [dbo].[child]
+(
+    [id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+    [parent_id] UNIQUEIDENTIFIER NOT NULL,
+    CONSTRAINT [fk_child_parent] FOREIGN KEY ([parent_id])
+        REFERENCES [dbo].[parent]([id])
+);
+");
+
+    SchemaSourceAnalyser analyser = CreateAnalyser();
+    analyser.Execute();
+
+    SourceAnalysisResult? analysis = ReadAnalysisResult();
+    TableAnalysis child = analysis!.Tables.Single(t => t.Name == "child");
+    child.ForeignKeyReferences.Should().ContainSingle()
+      .Which.OnDelete.Should().Be("NoAction",
+        "FKs without explicit action should normalise to NoAction, not NotSpecified");
   }
 }
 

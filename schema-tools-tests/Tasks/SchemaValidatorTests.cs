@@ -35,8 +35,8 @@ public class SchemaValidatorTests
       Columns =
         [
             new ColumnMetadata { Name = "id", Type = "UNIQUEIDENTIFIER", IsPrimaryKey = true },
-                new ColumnMetadata { Name = "created_by", Type = "UNIQUEIDENTIFIER" },
-                new ColumnMetadata { Name = "updated_by", Type = "UNIQUEIDENTIFIER" }
+                new ColumnMetadata { Name = "record_created_by", Type = "UNIQUEIDENTIFIER" },
+                new ColumnMetadata { Name = "record_updated_by", Type = "UNIQUEIDENTIFIER" }
         ],
       Constraints = new ConstraintsCollection
       {
@@ -269,14 +269,14 @@ public class SchemaValidatorTests
       t.HistoryTable = "[test].[events_history]";
       t.Columns.Add(new ColumnMetadata
       {
-        Name = "valid_from",
+        Name = "record_valid_from",
         Type = "DATETIME2(7)",
         IsGeneratedAlways = true,
         GeneratedAlwaysType = "RowStart"
       });
       t.Columns.Add(new ColumnMetadata
       {
-        Name = "valid_to",
+        Name = "record_valid_until",
         Type = "DATETIME2(7)",
         IsGeneratedAlways = true,
         GeneratedAlwaysType = "RowEnd"
@@ -296,7 +296,7 @@ public class SchemaValidatorTests
       t.HistoryTable = "[test].[events_history]";
       t.Columns.Add(new ColumnMetadata
       {
-        Name = "valid_to",
+        Name = "record_valid_until",
         Type = "DATETIME2(7)",
         IsGeneratedAlways = true
       });
@@ -304,7 +304,7 @@ public class SchemaValidatorTests
 
     (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
     success.Should().BeFalse();
-    task.ValidationErrors.Should().ContainMatch("*missing 'valid_from'*");
+    task.ValidationErrors.Should().ContainMatch("*missing 'record_valid_from'*");
   }
 
   [Fact]
@@ -316,13 +316,13 @@ public class SchemaValidatorTests
       t.HistoryTable = "[test].[events_history]";
       t.Columns.Add(new ColumnMetadata
       {
-        Name = "valid_from",
+        Name = "record_valid_from",
         Type = "DATETIME2(7)",
         IsGeneratedAlways = false
       });
       t.Columns.Add(new ColumnMetadata
       {
-        Name = "valid_to",
+        Name = "record_valid_until",
         Type = "DATETIME2(7)",
         IsGeneratedAlways = true
       });
@@ -342,14 +342,14 @@ public class SchemaValidatorTests
       t.HistoryTable = null;
       t.Columns.Add(new ColumnMetadata
       {
-        Name = "valid_from",
+        Name = "record_valid_from",
         Type = "DATETIME2(7)",
         IsGeneratedAlways = true,
         GeneratedAlwaysType = "RowStart"
       });
       t.Columns.Add(new ColumnMetadata
       {
-        Name = "valid_to",
+        Name = "record_valid_until",
         Type = "DATETIME2(7)",
         IsGeneratedAlways = true,
         GeneratedAlwaysType = "RowEnd"
@@ -384,8 +384,8 @@ public class SchemaValidatorTests
 
     (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
     success.Should().BeFalse();
-    task.ValidationErrors.Should().ContainMatch("*Missing required 'created_by'*");
-    task.ValidationErrors.Should().ContainMatch("*Missing required 'updated_by'*");
+    task.ValidationErrors.Should().ContainMatch("*Missing required 'record_created_by'*");
+    task.ValidationErrors.Should().ContainMatch("*Missing required 'record_updated_by'*");
   }
 
   [Fact]
@@ -395,12 +395,12 @@ public class SchemaValidatorTests
     {
       t.IsAppendOnly = true;
       // Remove updated_by -- append-only shouldn't have it
-      t.Columns.RemoveAll(c => c.Name == "updated_by");
+      t.Columns.RemoveAll(c => c.Name == "record_updated_by");
     });
 
     (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
     success.Should().BeTrue();
-    task.ValidationWarnings.Should().ContainMatch("*missing 'created_at'*");
+    task.ValidationWarnings.Should().ContainMatch("*missing 'record_created_at'*");
   }
 
   [Fact]
@@ -409,12 +409,12 @@ public class SchemaValidatorTests
     TableMetadata table = CreateTable("logs", t =>
     {
       t.IsAppendOnly = true;
-      t.Columns.Add(new ColumnMetadata { Name = "created_at", Type = "DATETIMEOFFSET(7)" });
+      t.Columns.Add(new ColumnMetadata { Name = "record_created_at", Type = "DATETIMEOFFSET(7)" });
     });
 
     (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
     success.Should().BeTrue();
-    task.ValidationWarnings.Should().ContainMatch("*should not have 'updated_by'*");
+    task.ValidationWarnings.Should().ContainMatch("*should not have 'record_updated_by'*");
   }
 
   // --- Naming convention validation ----------------------------------------
@@ -486,8 +486,8 @@ public class SchemaValidatorTests
       Columns =
         [
             new ColumnMetadata { Name = "data", Type = "VARCHAR(100)" },
-                new ColumnMetadata { Name = "created_by", Type = "UNIQUEIDENTIFIER" },
-                new ColumnMetadata { Name = "updated_by", Type = "UNIQUEIDENTIFIER" }
+                new ColumnMetadata { Name = "record_created_by", Type = "UNIQUEIDENTIFIER" },
+                new ColumnMetadata { Name = "record_updated_by", Type = "UNIQUEIDENTIFIER" }
         ],
       Constraints = new ConstraintsCollection()
     };
@@ -507,7 +507,7 @@ public class SchemaValidatorTests
       t.HasSoftDelete = true;
       t.HasActiveColumn = true;
       t.HasTemporalVersioning = false;
-      t.ActiveColumnName = "active";
+      t.ActiveColumnName = "record_active";
     });
 
     (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
@@ -601,9 +601,9 @@ public class SchemaValidatorTests
     TableMetadata table = CreateTable("temporal", t =>
     {
       t.HasTemporalVersioning = true;
-      // Table has default valid_from / valid_to but config expects period_start / period_end
-      t.Columns.Add(new ColumnMetadata { Name = "valid_from", Type = "DATETIME2", IsGeneratedAlways = true });
-      t.Columns.Add(new ColumnMetadata { Name = "valid_to", Type = "DATETIME2", IsGeneratedAlways = true });
+      // Table has default temporal columns but config expects period_start / period_end
+      t.Columns.Add(new ColumnMetadata { Name = "record_valid_from", Type = "DATETIME2", IsGeneratedAlways = true });
+      t.Columns.Add(new ColumnMetadata { Name = "record_valid_until", Type = "DATETIME2", IsGeneratedAlways = true });
     });
 
     (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table), config);
@@ -661,8 +661,8 @@ public class SchemaValidatorTests
       t.HistoryTable = "[test].[soft_del_history]";
       t.ActiveColumnName = "is_enabled";
       t.Columns.Add(new ColumnMetadata { Name = "is_enabled", Type = "BIT", DefaultValue = "1" });
-      t.Columns.Add(new ColumnMetadata { Name = "valid_from", Type = "DATETIME2", IsGeneratedAlways = true });
-      t.Columns.Add(new ColumnMetadata { Name = "valid_to", Type = "DATETIME2", IsGeneratedAlways = true });
+      t.Columns.Add(new ColumnMetadata { Name = "record_valid_from", Type = "DATETIME2", IsGeneratedAlways = true });
+      t.Columns.Add(new ColumnMetadata { Name = "record_valid_until", Type = "DATETIME2", IsGeneratedAlways = true });
     });
 
     (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table), config);

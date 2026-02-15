@@ -12,14 +12,14 @@ CREATE TABLE [dbo].[comments]
         CHECK ([owner_type] IN ('user', 'organisation', 'order')),
     [owner_id]      UNIQUEIDENTIFIER    NOT NULL,
     [body]          VARCHAR(4000)       NOT NULL,
-    [active]        BIT                 NOT NULL
+    [record_active]        BIT                 NOT NULL
         CONSTRAINT [df_comments_active] DEFAULT 1,
-    [created_by]    UNIQUEIDENTIFIER    NOT NULL,
-    [updated_by]    UNIQUEIDENTIFIER    NOT NULL,
-    [valid_from]    DATETIME2(7)        GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to]      DATETIME2(7)        GENERATED ALWAYS AS ROW END NOT NULL,
+    [record_created_by]    UNIQUEIDENTIFIER    NOT NULL,
+    [record_updated_by]    UNIQUEIDENTIFIER    NOT NULL,
+    [record_valid_from]    DATETIME2(7)        GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until]      DATETIME2(7)        GENERATED ALWAYS AS ROW END NOT NULL,
 
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to]),
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until]),
 
     CONSTRAINT [pk_comments] PRIMARY KEY CLUSTERED ([id])
 )

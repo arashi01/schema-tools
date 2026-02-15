@@ -14,10 +14,19 @@
     <!-- SQL Server 2025 (version 17.x) - current GA release -->
     <DSP>Microsoft.Data.Tools.Schema.Sql.Sql170DatabaseSchemaProvider</DSP>
   </PropertyGroup>
-  <ItemGroup>
-    <!-- SchemaTools MSBuild tasks: generates soft-delete triggers, reactivation
-         guards, purge procedures, active-record views, and documentation.
-         Version is resolved from the local NuGet feed (see nuget.config). -->
-    <PackageReference Include="SchemaTools" Version="*" />
-  </ItemGroup>
+
+  <!-- Direct source-tree reference to SchemaTools: bypasses NuGet packaging entirely.
+       Import the .targets file from the sibling project, overriding the UsingTask
+       assembly path to point at the build output DLL instead of a NuGet package layout. -->
+  <PropertyGroup>
+    <SchemaToolsRoot>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '..', 'schema-tools'))</SchemaToolsRoot>
+    <SchemaTools_TFM Condition="'$(MSBuildRuntimeType)' != 'Core'">netstandard2.0</SchemaTools_TFM>
+    <SchemaTools_TFM Condition="'$(MSBuildRuntimeType)' == 'Core'">net10.0</SchemaTools_TFM>
+    <!-- Override the assembly path before the targets file is imported.
+         The targets file uses $(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll
+         which resolves correctly for NuGet layout but not for source-tree layout.
+         We re-define the UsingTask assembly via SchemaToolsTaskAssembly. -->
+    <SchemaToolsTaskAssembly>$(SchemaToolsRoot)\bin\Debug\$(SchemaTools_TFM)\SchemaTools.dll</SchemaToolsTaskAssembly>
+  </PropertyGroup>
+  <Import Project="$(SchemaToolsRoot)\build\SchemaTools.targets" />
 </Project>

@@ -6,7 +6,8 @@
 nupkg/
 target/
 _generated/
-schema-metadata.json
+schema.json
+analysis.json
 SCHEMA.md
 
 # Dotfiles

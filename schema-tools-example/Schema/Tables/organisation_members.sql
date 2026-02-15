@@ -10,14 +10,14 @@ CREATE TABLE [dbo].[organisation_members]
     [user_id]           UNIQUEIDENTIFIER    NOT NULL,
     [role]              VARCHAR(50)         NOT NULL
         CONSTRAINT [df_organisation_members_role] DEFAULT 'member',
-    [active]            BIT                 NOT NULL
+    [record_active]            BIT                 NOT NULL
         CONSTRAINT [df_organisation_members_active] DEFAULT 1,
-    [created_by]        UNIQUEIDENTIFIER    NOT NULL,
-    [updated_by]        UNIQUEIDENTIFIER    NOT NULL,
-    [valid_from]        DATETIME2(7)        GENERATED ALWAYS AS ROW START NOT NULL,
-    [valid_to]          DATETIME2(7)        GENERATED ALWAYS AS ROW END NOT NULL,
+    [record_created_by]        UNIQUEIDENTIFIER    NOT NULL,
+    [record_updated_by]        UNIQUEIDENTIFIER    NOT NULL,
+    [record_valid_from]        DATETIME2(7)        GENERATED ALWAYS AS ROW START NOT NULL,
+    [record_valid_until]          DATETIME2(7)        GENERATED ALWAYS AS ROW END NOT NULL,
 
-    PERIOD FOR SYSTEM_TIME ([valid_from], [valid_to]),
+    PERIOD FOR SYSTEM_TIME ([record_valid_from], [record_valid_until]),
 
     CONSTRAINT [pk_organisation_members] PRIMARY KEY CLUSTERED ([id]),
     CONSTRAINT [uq_organisation_members] UNIQUE ([organisation_id], [user_id]),

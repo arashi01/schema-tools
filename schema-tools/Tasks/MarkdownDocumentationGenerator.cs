@@ -444,13 +444,15 @@ public class MarkdownDocumentationGenerator : MSTask
     var actions = new List<string>();
 
     if (!string.IsNullOrEmpty(onDelete) &&
-        !string.Equals(onDelete, "NoAction", StringComparison.OrdinalIgnoreCase))
+        !string.Equals(onDelete, "NoAction", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(onDelete, "NotSpecified", StringComparison.OrdinalIgnoreCase))
     {
       actions.Add($"ON DELETE {FormatAction(onDelete!)}");
     }
 
     if (!string.IsNullOrEmpty(onUpdate) &&
-        !string.Equals(onUpdate, "NoAction", StringComparison.OrdinalIgnoreCase))
+        !string.Equals(onUpdate, "NoAction", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(onUpdate, "NotSpecified", StringComparison.OrdinalIgnoreCase))
     {
       actions.Add($"ON UPDATE {FormatAction(onUpdate!)}");
     }

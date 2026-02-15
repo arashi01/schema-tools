@@ -3,7 +3,7 @@
 on:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ["v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -23,6 +23,7 @@ env:
 
 jobs:
   build:
+    name: Build and Test
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -35,7 +36,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
 
       - name: Restore
         run: dotnet restore
@@ -65,8 +66,36 @@ jobs:
           name: packages
           path: artifacts/*
 
+  sample:
+    name: Build and Verify Sample
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Build library
+        run: dotnet build schema-tools/SchemaTools.csproj -c Debug
+
+      - name: Build example project
+        run: dotnet build schema-tools-example/SchemaTools.Example.sqlproj
+
+      - name: Verify generated outputs
+        run: node schema-tools-example/verify-build.mjs
+
   publish:
-    needs: build
+    name: Publish Packages
+    needs: [build, sample]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -79,7 +108,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
 
       - name: Download package artifacts
         uses: actions/download-artifact@v7

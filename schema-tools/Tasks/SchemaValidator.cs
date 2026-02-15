@@ -235,7 +235,7 @@ public class SchemaValidator : MSTask
 
   private void ValidatePolymorphicTables(SchemaMetadata metadata)
   {
-    foreach (TableMetadata? table in metadata.Tables.Where(t => t.IsPolymorphic))
+    foreach (TableMetadata? table in metadata.Tables.Where(t => t.IsPolymorphic && !t.IsHistoryTable))
     {
       if (table.PolymorphicOwner == null)
       {
@@ -418,14 +418,20 @@ public class SchemaValidator : MSTask
         continue;
       }
 
-      if (string.IsNullOrEmpty(table.PrimaryKey))
+      // Check either the convenience PrimaryKey property (single-column)
+      // or the full Constraints.PrimaryKey (composite)
+      bool hasPk = !string.IsNullOrEmpty(table.PrimaryKey)
+                   || table.Constraints.PrimaryKey != null;
+
+      if (!hasPk)
       {
         _errors.Add($"{table.Name}: Table has no primary key defined");
         continue;
       }
 
-      // Validate PK column exists
-      if (!table.Columns.Any(c => c.Name == table.PrimaryKey))
+      // For single-column PKs, validate the column exists
+      if (!string.IsNullOrEmpty(table.PrimaryKey)
+          && !table.Columns.Any(c => c.Name == table.PrimaryKey))
       {
         _errors.Add(
             $"{table.Name}: Primary key column '{table.PrimaryKey}' not found in table");

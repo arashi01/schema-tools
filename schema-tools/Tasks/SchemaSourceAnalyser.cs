@@ -248,6 +248,12 @@ public class SchemaSourceAnalyser : MSTask
       return null;
     }
 
+    // Skip temporary tables (# and ## prefixed names found in stored procedure scripts)
+    if (visitor.TableName!.StartsWith("#"))
+    {
+      return null;
+    }
+
     string? category = SqlCommentParser.ExtractCategory(sqlText);
     SchemaToolsConfig effective = _config.ResolveForTable(visitor.TableName!, category);
 
@@ -328,7 +334,7 @@ public class SchemaSourceAnalyser : MSTask
           ReferencedSchema = fk.ReferenceTableName.SchemaIdentifier?.Value ?? _config.DefaultSchema,
           Columns = fk.Columns.Select(c => c.Value).ToList(),
           ReferencedColumns = fk.ReferencedTableColumns.Select(c => c.Value).ToList(),
-          OnDelete = fk.DeleteAction.ToString()
+          OnDelete = ScriptDomParser.ConvertDeleteUpdateAction(fk.DeleteAction)
         });
       }
     }
