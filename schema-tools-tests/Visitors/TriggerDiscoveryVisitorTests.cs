@@ -7,7 +7,7 @@ public class TriggerDiscoveryVisitorTests
 {
   private static List<DiscoveredTrigger> ParseAndDiscoverTriggers(string sql)
   {
-    var parser = new TSql160Parser(initialQuotedIdentifiers: true);
+    var parser = new TSql170Parser(initialQuotedIdentifiers: true);
     using var reader = new StringReader(sql);
     TSqlFragment fragment = parser.Parse(reader, out _);
 

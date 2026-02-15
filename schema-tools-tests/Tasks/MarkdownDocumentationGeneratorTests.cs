@@ -57,10 +57,10 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
                 new ColumnMetadata { Name = "email", Type = "VARCHAR(200)", IsUnique = true },
                 new ColumnMetadata
                 {
-                    Name = "created_by", Type = "UNIQUEIDENTIFIER",
+                    Name = "record_created_by", Type = "UNIQUEIDENTIFIER",
                     ForeignKey = new ForeignKeyReference { Table = "individuals", Column = "id" }
                 },
-                new ColumnMetadata { Name = "active", Type = "BIT", DefaultValue = "1" }
+                new ColumnMetadata { Name = "record_active", Type = "BIT", DefaultValue = "1" }
         ],
       Constraints = new ConstraintsCollection
       {
@@ -84,7 +84,7 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
                     }
             ]
       },
-      ActiveColumnName = "active"
+      ActiveColumnName = "record_active"
     };
 
     var departments = new TableMetadata
@@ -288,6 +288,69 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
 
     md.Should().NotContain("**Foreign Keys:**");
     md.Should().NotContain("**Check Constraints:**");
+  }
+
+  // --- FK action formatting ------------------------------------------------
+
+  [Fact]
+  public void Execute_ForeignKeyWithCascadeDelete_RendersAction()
+  {
+    SchemaMetadata metadata = CreateMetadata();
+    metadata.Tables[0].Constraints!.ForeignKeys[0].OnDelete = "Cascade";
+
+    string md = RunGenerator(metadata: metadata);
+
+    md.Should().Contain("ON DELETE CASCADE");
+  }
+
+  [Fact]
+  public void Execute_ForeignKeyWithSetNull_RendersAction()
+  {
+    SchemaMetadata metadata = CreateMetadata();
+    metadata.Tables[0].Constraints!.ForeignKeys[0].OnUpdate = "SetNull";
+
+    string md = RunGenerator(metadata: metadata);
+
+    md.Should().Contain("ON UPDATE SET NULL");
+  }
+
+  [Fact]
+  public void Execute_ForeignKeyWithNoAction_OmitsAction()
+  {
+    SchemaMetadata metadata = CreateMetadata();
+    metadata.Tables[0].Constraints!.ForeignKeys[0].OnDelete = "NoAction";
+    metadata.Tables[0].Constraints!.ForeignKeys[0].OnUpdate = "NoAction";
+
+    string md = RunGenerator(metadata: metadata);
+
+    md.Should().NotContain("ON DELETE");
+    md.Should().NotContain("ON UPDATE");
+  }
+
+  [Fact]
+  public void Execute_ForeignKeyWithNotSpecified_OmitsAction()
+  {
+    SchemaMetadata metadata = CreateMetadata();
+    metadata.Tables[0].Constraints!.ForeignKeys[0].OnDelete = "NotSpecified";
+    metadata.Tables[0].Constraints!.ForeignKeys[0].OnUpdate = "NotSpecified";
+
+    string md = RunGenerator(metadata: metadata);
+
+    md.Should().NotContain("ON DELETE");
+    md.Should().NotContain("ON UPDATE");
+  }
+
+  [Fact]
+  public void Execute_ForeignKeyWithNullActions_OmitsAction()
+  {
+    SchemaMetadata metadata = CreateMetadata();
+    metadata.Tables[0].Constraints!.ForeignKeys[0].OnDelete = null;
+    metadata.Tables[0].Constraints!.ForeignKeys[0].OnUpdate = null;
+
+    string md = RunGenerator(metadata: metadata);
+
+    md.Should().NotContain("ON DELETE");
+    md.Should().NotContain("ON UPDATE");
   }
 
   // --- Output file ---------------------------------------------------------

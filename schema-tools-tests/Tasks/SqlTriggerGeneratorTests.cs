@@ -42,7 +42,7 @@ public class SqlTriggerGeneratorTests : IDisposable
     HasSoftDelete = true,
     HasActiveColumn = true,
     HasTemporalVersioning = true,
-    ActiveColumnName = "active",
+    ActiveColumnName = "record_active",
     PrimaryKeyColumns = ["id"],
     ChildTables = [.. childTableNames],
     IsLeafTable = false
@@ -59,7 +59,7 @@ public class SqlTriggerGeneratorTests : IDisposable
     HasSoftDelete = true,
     HasActiveColumn = true,
     HasTemporalVersioning = true,
-    ActiveColumnName = "active",
+    ActiveColumnName = "record_active",
     PrimaryKeyColumns = ["id"],
     ChildTables = [],
     IsLeafTable = true,
@@ -103,10 +103,10 @@ public class SqlTriggerGeneratorTests : IDisposable
     sql.Should().Contain("[test].[trg_users_cascade_soft_delete]");
     sql.Should().Contain("ON [test].[users]");
     sql.Should().Contain("AFTER UPDATE");
-    sql.Should().Contain("IF NOT UPDATE(active)");  // Guard clause pattern
+    sql.Should().Contain("IF NOT UPDATE(record_active)");  // Guard clause pattern
     // Cascade to children - sets active=0 on child tables
     sql.Should().Contain("UPDATE [test].[orders]");
-    sql.Should().Contain("active = 0");
+    sql.Should().Contain("record_active = 0");
   }
 
   [Fact]
@@ -281,7 +281,7 @@ public class SqlTriggerGeneratorTests : IDisposable
     string sql = File.ReadAllText(Path.Combine(_outputDir, "trg_custom_table_cascade_soft_delete.sql"));
     sql.Should().Contain("IF NOT UPDATE(is_enabled)");
     sql.Should().Contain("is_enabled = 0");
-    sql.Should().NotContain("IF NOT UPDATE(active)");
+    sql.Should().NotContain("IF NOT UPDATE(record_active)");
   }
 
   // --- Error Handling ------------------------------------------------------
@@ -319,7 +319,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       Schema = "test",
       HasSoftDelete = true,
       HasActiveColumn = true,
-      ActiveColumnName = "active",
+      ActiveColumnName = "record_active",
       PrimaryKeyColumns = ["tenant_id", "user_id"],  // Composite PK
       ChildTables = ["sessions"]
     };
@@ -328,7 +328,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       Name = "sessions",
       Schema = "test",
       HasSoftDelete = true,
-      ActiveColumnName = "active",
+      ActiveColumnName = "record_active",
       PrimaryKeyColumns = ["session_id"],
       ChildTables = [],
       ForeignKeyReferences =
@@ -365,7 +365,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       Schema = "test",
       HasSoftDelete = true,
       HasActiveColumn = true,
-      ActiveColumnName = "active",
+      ActiveColumnName = "record_active",
       PrimaryKeyColumns = ["id"],
       ChildTables = ["orders"]
     };
@@ -374,7 +374,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       Name = "orders",
       Schema = "test",
       HasSoftDelete = true,
-      ActiveColumnName = "active",
+      ActiveColumnName = "record_active",
       PrimaryKeyColumns = ["id"],
       ChildTables = [],
       ForeignKeyReferences =
@@ -401,9 +401,9 @@ public class SqlTriggerGeneratorTests : IDisposable
     sql.Should().Contain("ON [test].[orders]");
     sql.Should().Contain("AFTER UPDATE");
     // Check for reactivation (0 -> 1)
-    sql.Should().Contain("i.active = 1 AND d.active = 0");
+    sql.Should().Contain("i.record_active = 1 AND d.record_active = 0");
     // Check if parent is inactive
-    sql.Should().Contain("p.active = 0");
+    sql.Should().Contain("p.record_active = 0");
     // Should have RAISERROR and ROLLBACK
     sql.Should().Contain("RAISERROR");
     sql.Should().Contain("ROLLBACK TRANSACTION");
@@ -417,7 +417,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       Name = "users",
       Schema = "test",
       HasSoftDelete = true,
-      ActiveColumnName = "active",
+      ActiveColumnName = "record_active",
       PrimaryKeyColumns = ["id"],
       ChildTables = ["orders"]
     };
@@ -426,7 +426,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       Name = "products",
       Schema = "test",
       HasSoftDelete = true,
-      ActiveColumnName = "active",
+      ActiveColumnName = "record_active",
       PrimaryKeyColumns = ["id"],
       ChildTables = ["orders"]
     };
@@ -435,7 +435,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       Name = "orders",
       Schema = "test",
       HasSoftDelete = true,
-      ActiveColumnName = "active",
+      ActiveColumnName = "record_active",
       PrimaryKeyColumns = ["id"],
       ChildTables = [],
       ForeignKeyReferences =
@@ -540,7 +540,7 @@ public class SqlTriggerGeneratorTests : IDisposable
     HasSoftDelete = true,
     HasActiveColumn = true,
     HasTemporalVersioning = true,
-    ActiveColumnName = "active",
+    ActiveColumnName = "record_active",
     PrimaryKeyColumns = ["id"],
     ChildTables = [.. childTableNames],
     SoftDeleteMode = mode,
@@ -686,15 +686,15 @@ public class SqlTriggerGeneratorTests : IDisposable
       Schema = "test",
       HasSoftDelete = true,
       HasTemporalVersioning = true,
-      ActiveColumnName = "active",
-      ValidToColumn = "valid_to",
+      ActiveColumnName = "record_active",
+      ValidToColumn = "record_valid_until",
       PrimaryKeyColumns = ["id"],
       ChildTables = ["orders"],
       ReactivationCascade = true,
       SoftDeleteMode = SoftDeleteMode.Cascade
     };
     TableAnalysis child = LeafTable("orders", "user_id", "users");
-    child.ValidToColumn = "valid_to";
+    child.ValidToColumn = "record_valid_until";
     SourceAnalysisResult analysis = CreateAnalysis(parent, child);
     SqlTriggerGenerator task = CreateTask(analysis);
 
@@ -709,7 +709,7 @@ public class SqlTriggerGeneratorTests : IDisposable
     content.Should().Contain("AFTER UPDATE");
     // Verify timestamp matching logic is present
     content.Should().Contain("DATEDIFF(MILLISECOND");
-    content.Should().Contain("valid_to");
+    content.Should().Contain("record_valid_until");
   }
 
   [Fact]
@@ -741,8 +741,8 @@ public class SqlTriggerGeneratorTests : IDisposable
       Schema = "dbo",
       HasSoftDelete = true,
       HasTemporalVersioning = true,
-      ActiveColumnName = "active",
-      ValidToColumn = "valid_to",
+      ActiveColumnName = "record_active",
+      ValidToColumn = "record_valid_until",
       PrimaryKeyColumns = ["id"],
       ChildTables = ["profiles", "settings"],
       ReactivationCascade = true
@@ -753,8 +753,8 @@ public class SqlTriggerGeneratorTests : IDisposable
       Schema = "dbo",
       HasSoftDelete = true,
       HasTemporalVersioning = true,
-      ActiveColumnName = "active",
-      ValidToColumn = "valid_to",
+      ActiveColumnName = "record_active",
+      ValidToColumn = "record_valid_until",
       PrimaryKeyColumns = ["id"],
       ForeignKeyReferences =
       [
@@ -767,8 +767,8 @@ public class SqlTriggerGeneratorTests : IDisposable
       Schema = "dbo",
       HasSoftDelete = true,
       HasTemporalVersioning = true,
-      ActiveColumnName = "active",
-      ValidToColumn = "valid_to",
+      ActiveColumnName = "record_active",
+      ValidToColumn = "record_valid_until",
       PrimaryKeyColumns = ["id"],
       ForeignKeyReferences =
       [
@@ -790,11 +790,11 @@ public class SqlTriggerGeneratorTests : IDisposable
     content.Should().Contain("[dbo].[profiles]");
     content.Should().Contain("[dbo].[settings]");
     // Should check for reactivation (active: 0 -> 1)
-    content.Should().Contain("i.active = 1 AND d.active = 0");
+    content.Should().Contain("i.record_active = 1 AND d.record_active = 0");
     // Should have default tolerance for timestamp matching
     content.Should().Contain("<= 2000");
     // Should set children to active
-    content.Should().Contain("c.active = 1");
+    content.Should().Contain("c.record_active = 1");
   }
 
   [Fact]
@@ -878,8 +878,8 @@ public class SqlTriggerGeneratorTests : IDisposable
       Schema = "test",
       HasSoftDelete = true,
       HasTemporalVersioning = true,
-      ActiveColumnName = "active",
-      ValidToColumn = "valid_to",
+      ActiveColumnName = "record_active",
+      ValidToColumn = "record_valid_until",
       PrimaryKeyColumns = ["tenant_id", "user_id"],
       ChildTables = ["tenant_user_roles"],
       ReactivationCascade = true
@@ -890,8 +890,8 @@ public class SqlTriggerGeneratorTests : IDisposable
       Schema = "test",
       HasSoftDelete = true,
       HasTemporalVersioning = true,
-      ActiveColumnName = "active",
-      ValidToColumn = "valid_to",
+      ActiveColumnName = "record_active",
+      ValidToColumn = "record_valid_until",
       PrimaryKeyColumns = ["id"],
       ForeignKeyReferences =
       [
@@ -927,8 +927,8 @@ public class SqlTriggerGeneratorTests : IDisposable
       Schema = "dbo",
       HasSoftDelete = true,
       HasTemporalVersioning = true,
-      ActiveColumnName = "active",
-      ValidToColumn = "valid_to",
+      ActiveColumnName = "record_active",
+      ValidToColumn = "record_valid_until",
       PrimaryKeyColumns = ["id"],
       ChildTables = ["orders"],
       ReactivationCascade = true,
@@ -936,7 +936,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       SoftDeleteMode = SoftDeleteMode.Cascade
     };
     TableAnalysis child = LeafTable("orders", "user_id", "users");
-    child.ValidToColumn = "valid_to";
+    child.ValidToColumn = "record_valid_until";
     SourceAnalysisResult analysis = CreateAnalysis(parent, child);
     SqlTriggerGenerator task = CreateTask(analysis);
 

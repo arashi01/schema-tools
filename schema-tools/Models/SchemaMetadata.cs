@@ -8,7 +8,7 @@ namespace SchemaTools.Models;
 public class SchemaMetadata
 {
   [JsonPropertyName("$schema")]
-  public string Schema { get; set; } = "./schema-metadata.schema.json";
+  public string Schema { get; set; } = "./schema.schema.json";
 
   [JsonPropertyName("version")]
   public string Version { get; set; } = SchemaToolsDefaults.MetadataVersion;
@@ -17,7 +17,7 @@ public class SchemaMetadata
   public DateTime GeneratedAt { get; set; }
 
   [JsonPropertyName("generatedBy")]
-  public string GeneratedBy { get; set; } = "SchemaMetadataGenerator";
+  public string GeneratedBy { get; set; } = "SchemaMetadataExtractor";
 
   [JsonPropertyName("database")]
   public string Database { get; set; } = "Database";

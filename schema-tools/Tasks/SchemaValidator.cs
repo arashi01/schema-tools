@@ -235,7 +235,7 @@ public class SchemaValidator : MSTask
 
   private void ValidatePolymorphicTables(SchemaMetadata metadata)
   {
-    foreach (TableMetadata? table in metadata.Tables.Where(t => t.IsPolymorphic))
+    foreach (TableMetadata? table in metadata.Tables.Where(t => t.IsPolymorphic && !t.IsHistoryTable))
     {
       if (table.PolymorphicOwner == null)
       {
@@ -412,14 +412,26 @@ public class SchemaValidator : MSTask
   {
     foreach (TableMetadata table in metadata.Tables)
     {
-      if (string.IsNullOrEmpty(table.PrimaryKey))
+      // Skip temporal history tables - they do not have primary keys by design
+      if (table.IsHistoryTable)
+      {
+        continue;
+      }
+
+      // Check either the convenience PrimaryKey property (single-column)
+      // or the full Constraints.PrimaryKey (composite)
+      bool hasPk = !string.IsNullOrEmpty(table.PrimaryKey)
+                   || table.Constraints.PrimaryKey != null;
+
+      if (!hasPk)
       {
         _errors.Add($"{table.Name}: Table has no primary key defined");
         continue;
       }
 
-      // Validate PK column exists
-      if (!table.Columns.Any(c => c.Name == table.PrimaryKey))
+      // For single-column PKs, validate the column exists
+      if (!string.IsNullOrEmpty(table.PrimaryKey)
+          && !table.Columns.Any(c => c.Name == table.PrimaryKey))
       {
         _errors.Add(
             $"{table.Name}: Primary key column '{table.PrimaryKey}' not found in table");
@@ -507,14 +519,9 @@ public class SchemaValidator : MSTask
         _errors.Add($"{table.Name}: Marked as HasSoftDelete but HasTemporalVersioning is false");
       }
 
-      // Active column should have default value of 1
-      string activeColumnName = table.ActiveColumnName ?? _config.Columns.Active;
-      ColumnMetadata? activeColumn = table.Columns.FirstOrDefault(c =>
-          string.Equals(c.Name, activeColumnName, StringComparison.OrdinalIgnoreCase));
-      if (activeColumn != null && activeColumn.DefaultValue != "1")
-      {
-        _warnings.Add($"{table.Name}.{activeColumnName}: Should have DEFAULT 1");
-      }
+      // Note: We intentionally do not validate DEFAULT constraints or their values.
+      // How downstream users handle active column defaults (explicit inserts, triggers,
+      // application logic, etc.) is an implementation choice, not a schema requirement.
     }
   }
 

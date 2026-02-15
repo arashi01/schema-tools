@@ -9,7 +9,7 @@ public class ScriptFragmentFormatterTests
   {
     // Parse a SELECT to extract an expression from ScriptDom
     string sql = $"SELECT {expressionSql};";
-    var parser = new TSql160Parser(false);
+    var parser = new TSql170Parser(false);
     TSqlFragment fragment = parser.Parse(new StringReader(sql), out IList<ParseError>? errors);
 
     errors.Should().BeEmpty("SQL should parse without errors: {0}", expressionSql);
@@ -40,7 +40,7 @@ public class ScriptFragmentFormatterTests
   public void ToSql_InPredicate_ReturnsSqlText()
   {
     string sql = "CREATE TABLE x (t VARCHAR(20) CHECK (t IN ('a', 'b')));";
-    var parser = new TSql160Parser(false);
+    var parser = new TSql170Parser(false);
     TSqlFragment fragment = parser.Parse(new StringReader(sql), out IList<ParseError>? errors);
     errors.Should().BeEmpty();
 

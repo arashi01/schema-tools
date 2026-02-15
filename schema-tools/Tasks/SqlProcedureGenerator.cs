@@ -1,6 +1,7 @@
 ﻿using System.Text;
-using System.Text.Json;
 using Microsoft.Build.Framework;
+using SchemaTools.Models;
+using SchemaTools.Utilities;
 using MSTask = Microsoft.Build.Utilities.Task;
 
 namespace SchemaTools.Tasks;
@@ -61,7 +62,7 @@ public class SqlProcedureGenerator : MSTask
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, string.Empty);
 
-      SourceAnalysisResult analysis = LoadAnalysis();
+      SourceAnalysisResult analysis = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
 
       // Find all tables with soft-delete
       var softDeleteTables = analysis.Tables
@@ -123,32 +124,7 @@ public class SqlProcedureGenerator : MSTask
     }
   }
 
-  private SourceAnalysisResult LoadAnalysis()
-  {
-    if (TestAnalysis != null)
-    {
-      Log.LogMessage("Using injected test analysis");
-      return TestAnalysis;
-    }
 
-    if (!File.Exists(AnalysisFile))
-    {
-      throw new FileNotFoundException($"Analysis file not found: {AnalysisFile}");
-    }
-
-    string json = File.ReadAllText(AnalysisFile);
-    SourceAnalysisResult? analysis = JsonSerializer.Deserialize<SourceAnalysisResult>(json, new JsonSerializerOptions
-    {
-      PropertyNameCaseInsensitive = true
-    });
-
-    if (analysis == null || analysis.Tables == null)
-    {
-      throw new InvalidOperationException("Failed to deserialize analysis file");
-    }
-
-    return analysis;
-  }
 
   /// <summary>
   /// Topological sort to get FK-safe deletion order (leaves first, parents last)
@@ -231,7 +207,7 @@ public class SqlProcedureGenerator : MSTask
 -- DO NOT EDIT MANUALLY - regenerate with Force=true
 -- =============================================================================
 
-CREATE OR ALTER PROCEDURE [{ProcedureSchema}].[{PurgeProcedureName}]
+CREATE PROCEDURE [{ProcedureSchema}].[{PurgeProcedureName}]
     @grace_period_days INT = {DefaultGracePeriodDays},
     @batch_size INT = 1000,
     @dry_run BIT = 0

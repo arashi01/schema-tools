@@ -68,7 +68,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -93,7 +93,7 @@ public class SqlViewGeneratorTests : IDisposable
     content.Should().Contain("CREATE VIEW [dbo].[vw_users]");
     content.Should().Contain("SELECT *");
     content.Should().Contain("FROM [dbo].[users]");
-    content.Should().Contain("WHERE [active] = 1");
+    content.Should().Contain("WHERE [record_active] = 1");
   }
 
   [Fact]
@@ -101,7 +101,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -205,7 +205,7 @@ public class SqlViewGeneratorTests : IDisposable
     {
       Columns = new ColumnConfig
       {
-        Active = "active",
+        Active = "record_active",
         ActiveValue = "1",
         InactiveValue = "0"
       },
@@ -233,12 +233,12 @@ public class SqlViewGeneratorTests : IDisposable
     // Check active view
     string activeContent = File.ReadAllText(Path.Combine(_tempDir, "vw_customers.sql"));
     activeContent.Should().Contain("CREATE VIEW [dbo].[vw_customers]");
-    activeContent.Should().Contain("WHERE [active] = 1");
+    activeContent.Should().Contain("WHERE [record_active] = 1");
 
     // Check deleted view
     string deletedContent = File.ReadAllText(Path.Combine(_tempDir, "vw_customers_deleted.sql"));
     deletedContent.Should().Contain("CREATE VIEW [dbo].[vw_customers_deleted]");
-    deletedContent.Should().Contain("WHERE [active] = 0");
+    deletedContent.Should().Contain("WHERE [record_active] = 0");
   }
 
   // ===========================================================================
@@ -250,7 +250,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -305,7 +305,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -344,7 +344,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -392,7 +392,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -440,7 +440,7 @@ public class SqlViewGeneratorTests : IDisposable
 
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -473,7 +473,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -501,7 +501,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -532,7 +532,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis
@@ -570,7 +570,7 @@ public class SqlViewGeneratorTests : IDisposable
   {
     var analysis = new SourceAnalysisResult
     {
-      Columns = new ColumnConfig { Active = "active", ActiveValue = "1" },
+      Columns = new ColumnConfig { Active = "record_active", ActiveValue = "1" },
       Tables =
       [
         new TableAnalysis

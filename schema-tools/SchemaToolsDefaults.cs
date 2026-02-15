@@ -36,7 +36,7 @@ public static class SchemaToolsDefaults
   /// <summary>
   /// Default soft-delete flag column name.
   /// </summary>
-  public const string ActiveColumn = "active";
+  public const string ActiveColumn = "record_active";
 
   /// <summary>
   /// SQL literal representing active state.
@@ -55,17 +55,17 @@ public static class SchemaToolsDefaults
   /// <summary>
   /// Default created timestamp column name.
   /// </summary>
-  public const string CreatedAtColumn = "created_at";
+  public const string CreatedAtColumn = "record_created_at";
 
   /// <summary>
   /// Default creator audit column name.
   /// </summary>
-  public const string CreatedByColumn = "created_by";
+  public const string CreatedByColumn = "record_created_by";
 
   /// <summary>
   /// Default last updater audit column name.
   /// </summary>
-  public const string UpdatedByColumn = "updated_by";
+  public const string UpdatedByColumn = "record_updated_by";
 
   /// <summary>
   /// SQL data type for updated_by column in triggers.
@@ -79,12 +79,12 @@ public static class SchemaToolsDefaults
   /// <summary>
   /// Default temporal period start column name.
   /// </summary>
-  public const string ValidFromColumn = "valid_from";
+  public const string ValidFromColumn = "record_valid_from";
 
   /// <summary>
   /// Default temporal period end column name.
   /// </summary>
-  public const string ValidToColumn = "valid_to";
+  public const string ValidToColumn = "record_valid_until";
 
   // ===========================================================================
   // Purge Configuration

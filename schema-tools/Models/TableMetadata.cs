@@ -53,6 +53,13 @@ public class TableMetadata
   [JsonPropertyName("historyTable")]
   public string? HistoryTable { get; set; }
 
+  /// <summary>
+  /// True if this table is a temporal history table (referenced by another table's HistoryTable property).
+  /// History tables do not have primary keys by design and are excluded from certain validations.
+  /// </summary>
+  [JsonPropertyName("isHistoryTable")]
+  public bool IsHistoryTable { get; set; }
+
   [JsonPropertyName("columns")]
   public List<ColumnMetadata> Columns { get; set; } = new();
 
@@ -61,9 +68,6 @@ public class TableMetadata
 
   [JsonPropertyName("indexes")]
   public List<IndexMetadata> Indexes { get; set; } = new();
-
-  [JsonPropertyName("triggers")]
-  public TriggerConfiguration Triggers { get; set; } = new();
 }
 
 public class PolymorphicOwnerInfo
@@ -91,25 +95,4 @@ public class ConstraintsCollection
 
   [JsonPropertyName("checkConstraints")]
   public List<CheckConstraint> CheckConstraints { get; set; } = new();
-}
-
-public class TriggerConfiguration
-{
-  [JsonPropertyName("custom")]
-  public List<CustomTrigger> Custom { get; set; } = new();
-}
-
-public class CustomTrigger
-{
-  [JsonPropertyName("name")]
-  public string Name { get; set; } = string.Empty;
-
-  [JsonPropertyName("description")]
-  public string? Description { get; set; }
-
-  [JsonPropertyName("timing")]
-  public string? Timing { get; set; }
-
-  [JsonPropertyName("events")]
-  public List<string>? Events { get; set; }
 }

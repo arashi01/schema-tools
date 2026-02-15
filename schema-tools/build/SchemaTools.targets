@@ -40,54 +40,63 @@
 
   <!-- Strategy: Source - paths in project directory (committed to source control) -->
   <PropertyGroup Condition="'$(SchemaToolsOutputStrategy)' == 'Source'">
-    <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Triggers\_generated</SchemaToolsTriggersOutput>
-    <SchemaToolsProceduresOutput Condition="'$(SchemaToolsProceduresOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Procedures\_generated</SchemaToolsProceduresOutput>
-    <SchemaToolsViewsOutput Condition="'$(SchemaToolsViewsOutput)' == ''">$(MSBuildProjectDirectory)\Schema\Views\_generated</SchemaToolsViewsOutput>
-    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(MSBuildProjectDirectory)\Build\schema-metadata.json</SchemaToolsMetadataOutput>
+    <SchemaToolsGeneratedOutput Condition="'$(SchemaToolsGeneratedOutput)' == ''">$(MSBuildProjectDirectory)\Schema\_generated</SchemaToolsGeneratedOutput>
+    <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(SchemaToolsGeneratedOutput)</SchemaToolsTriggersOutput>
+    <SchemaToolsProceduresOutput Condition="'$(SchemaToolsProceduresOutput)' == ''">$(SchemaToolsGeneratedOutput)</SchemaToolsProceduresOutput>
+    <SchemaToolsViewsOutput Condition="'$(SchemaToolsViewsOutput)' == ''">$(SchemaToolsGeneratedOutput)</SchemaToolsViewsOutput>
+    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(MSBuildProjectDirectory)\Build\schema.json</SchemaToolsMetadataOutput>
     <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(MSBuildProjectDirectory)\Docs\SCHEMA.md</SchemaToolsDocsOutput>
   </PropertyGroup>
 
   <!-- Strategy: Intermediate - paths in obj/bin directories (transient, not committed) -->
   <PropertyGroup Condition="'$(SchemaToolsOutputStrategy)' == 'Intermediate'">
-    <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(IntermediateOutputPath)SchemaTools\Triggers</SchemaToolsTriggersOutput>
-    <SchemaToolsProceduresOutput Condition="'$(SchemaToolsProceduresOutput)' == ''">$(IntermediateOutputPath)SchemaTools\Procedures</SchemaToolsProceduresOutput>
-    <SchemaToolsViewsOutput Condition="'$(SchemaToolsViewsOutput)' == ''">$(IntermediateOutputPath)SchemaTools\Views</SchemaToolsViewsOutput>
-    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(IntermediateOutputPath)schema-metadata.json</SchemaToolsMetadataOutput>
+    <SchemaToolsGeneratedOutput Condition="'$(SchemaToolsGeneratedOutput)' == ''">$(IntermediateOutputPath)SchemaTools</SchemaToolsGeneratedOutput>
+    <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(SchemaToolsGeneratedOutput)</SchemaToolsTriggersOutput>
+    <SchemaToolsProceduresOutput Condition="'$(SchemaToolsProceduresOutput)' == ''">$(SchemaToolsGeneratedOutput)</SchemaToolsProceduresOutput>
+    <SchemaToolsViewsOutput Condition="'$(SchemaToolsViewsOutput)' == ''">$(SchemaToolsGeneratedOutput)</SchemaToolsViewsOutput>
+    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(IntermediateOutputPath)schema.json</SchemaToolsMetadataOutput>
     <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(OutputPath)SCHEMA.md</SchemaToolsDocsOutput>
   </PropertyGroup>
 
   <!-- Analysis output always goes to intermediate (never committed) -->
   <PropertyGroup>
-    <SchemaToolsAnalysisOutput Condition="'$(SchemaToolsAnalysisOutput)' == ''">$(IntermediateOutputPath)schema-analysis.json</SchemaToolsAnalysisOutput>
+    <SchemaToolsAnalysisOutput Condition="'$(SchemaToolsAnalysisOutput)' == ''">$(IntermediateOutputPath)analysis.json</SchemaToolsAnalysisOutput>
   </PropertyGroup>
 
   <!-- =============================================================================
        TASK DEFINITIONS
+
+       Task assemblies live in tasks/{tfm}/ inside the NuGet package.
+       Dependencies are bundled alongside the task DLL.
+       
+       SchemaToolsTaskAssembly can be set by the importing project to override
+       the default NuGet-package-relative path (e.g., for source-tree references).
        ============================================================================= -->
 
+  <PropertyGroup>
+    <SchemaToolsTaskAssembly Condition="'$(SchemaToolsTaskAssembly)' == ''">$(MSBuildThisFileDirectory)..\tasks\$(SchemaTools_TFM)\SchemaTools.dll</SchemaToolsTaskAssembly>
+  </PropertyGroup>
+
   <UsingTask TaskName="SchemaTools.Tasks.SchemaSourceAnalyser"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(SchemaToolsTaskAssembly)" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SqlTriggerGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(SchemaToolsTaskAssembly)" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SqlProcedureGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(SchemaToolsTaskAssembly)" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataExtractor"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(SchemaToolsTaskAssembly)" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SchemaValidator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(SchemaToolsTaskAssembly)" />
 
   <UsingTask TaskName="SchemaTools.Tasks.MarkdownDocumentationGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
-
-  <UsingTask TaskName="SchemaTools.Tasks.SchemaMetadataGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(SchemaToolsTaskAssembly)" />
 
   <UsingTask TaskName="SchemaTools.Tasks.SqlViewGenerator"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\lib\$(SchemaTools_TFM)\SchemaTools.dll" />
+             AssemblyFile="$(SchemaToolsTaskAssembly)" />
 
   <!-- =============================================================================
        PRE-BUILD TARGETS
@@ -145,16 +154,22 @@
       Force="false" />
   </Target>
 
-  <!-- Phase 4: Include generated files in the build -->
+  <!-- Phase 4: Include generated files in the build
+       Remove-then-Include avoids duplicates when:
+       (a) the SDK auto-includes .sql files from the project tree (Source strategy), or
+       (b) multiple output properties resolve to the same directory (default). -->
   <Target Name="SchemaToolsIncludeGenerated"
           AfterTargets="SchemaToolsGenerateViews"
           BeforeTargets="BeforeBuild"
           Condition="'$(SchemaToolsEnabled)' == 'true'">
     <ItemGroup>
+      <Build Remove="$(SchemaToolsTriggersOutput)\**\*.sql" />
       <Build Include="$(SchemaToolsTriggersOutput)\**\*.sql"
              Condition="Exists('$(SchemaToolsTriggersOutput)')" />
+      <Build Remove="$(SchemaToolsProceduresOutput)\**\*.sql" />
       <Build Include="$(SchemaToolsProceduresOutput)\**\*.sql"
              Condition="Exists('$(SchemaToolsProceduresOutput)')" />
+      <Build Remove="$(SchemaToolsViewsOutput)\**\*.sql" />
       <Build Include="$(SchemaToolsViewsOutput)\**\*.sql"
              Condition="Exists('$(SchemaToolsViewsOutput)')" />
     </ItemGroup>

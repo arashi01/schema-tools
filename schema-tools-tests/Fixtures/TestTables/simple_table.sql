@@ -8,6 +8,6 @@ CREATE TABLE [test].[simple_table]
     
     [name] VARCHAR(200) NOT NULL,
     [value] INT NULL,
-    [created_at] DATETIMEOFFSET(7) NOT NULL DEFAULT SYSUTCDATETIME()
+    [record_created_at] DATETIMEOFFSET(7) NOT NULL DEFAULT SYSUTCDATETIME()
 );
 GO

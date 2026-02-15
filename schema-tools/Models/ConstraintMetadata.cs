@@ -88,6 +88,9 @@ public class IndexMetadata
   [JsonPropertyName("isClustered")]
   public bool IsClustered { get; set; }
 
+  [JsonPropertyName("isColumnStore")]
+  public bool IsColumnStore { get; set; }
+
   [JsonPropertyName("filterClause")]
   public string? FilterClause { get; set; }
 

@@ -9,7 +9,7 @@ namespace SchemaTools.Utilities;
 /// </summary>
 public static class ScriptFragmentFormatter
 {
-  private static readonly Sql160ScriptGenerator Generator = new(
+  private static readonly Sql170ScriptGenerator Generator = new(
       new SqlScriptGeneratorOptions
       {
         AlignClauseBodies = false,

@@ -9,7 +9,7 @@ public class DataTypeFormatterTests
   {
     // Parse a minimal CREATE TABLE to extract the data type from ScriptDom
     string sql = $"CREATE TABLE x ({columnTypeSql} NULL);";
-    var parser = new TSql160Parser(false);
+    var parser = new TSql170Parser(false);
     TSqlFragment fragment = parser.Parse(new StringReader(sql), out IList<ParseError>? errors);
 
     errors.Should().BeEmpty("SQL should parse without errors: {0}", columnTypeSql);
