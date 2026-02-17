@@ -31,7 +31,9 @@ const analysisPath = join(root, "analysis.json");
 assert(existsSync(generatedDir), "Schema/_generated/ directory exists");
 
 const expectedFiles = [
-  // Triggers (11)
+  // Triggers (13)
+  "trg_categories_cascade_soft_delete.sql",
+  "trg_categories_reactivation_guard.sql",
   "trg_countries_cascade_soft_delete.sql",
   "trg_country_dialling_codes_reactivation_guard.sql",
   "trg_orders_cascade_soft_delete.sql",
@@ -45,10 +47,12 @@ const expectedFiles = [
   "trg_user_profiles_reactivation_guard.sql",
   // Procedure (1)
   "usp_purge_soft_deleted.sql",
-  // Views (9)
+  // Views (11)
+  "vw_categories.sql",
   "vw_comments.sql",
   "vw_countries.sql",
   "vw_country_dialling_codes.sql",
+  "vw_currencies.sql",
   "vw_orders.sql",
   "vw_order_items.sql",
   "vw_organisations.sql",
@@ -212,6 +216,17 @@ if (existsSync(analysisPath)) {
       `country_dialling_codes PK = [country_code, dialling_code] (got ${JSON.stringify(diallingEntry.primaryKeyColumns)})`
     );
   }
+
+  // 5e. analysis.json should have descriptions and columnDescriptions
+  const usersEntry = analysis.tables.find((t) => t.name === "users");
+  assert(
+    usersEntry?.description != null && usersEntry.description.length > 0,
+    "analysis.json users has description"
+  );
+  assert(
+    usersEntry?.columnDescriptions?.email === "Primary email address used for authentication",
+    `analysis.json users.columnDescriptions.email correct (got "${usersEntry?.columnDescriptions?.email}")`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +261,8 @@ if (existsSync(metadataPath)) {
     countries: "core",
     orders: "commerce",
     order_items: "commerce",
+    categories: "commerce",
+    currencies: "commerce",
     comments: "social",
     audit_log: "audit",
     event_stream: "audit",
@@ -267,7 +284,53 @@ if (existsSync(metadataPath)) {
 }
 
 // ---------------------------------------------------------------------------
-// 8. Structured type decomposition (maxLength, precision, scale, isMaxLength)
+// 8. Description bridging from analysis.json
+// ---------------------------------------------------------------------------
+console.log("\n--- Description Bridging ---");
+
+if (existsSync(metadataPath)) {
+  const raw = readFileSync(metadataPath, "utf8").replace(/^\uFEFF/, "");
+  const metadata = JSON.parse(raw);
+  const table = (name) => metadata.tables.find((t) => t.name === name);
+  const col = (tableName, colName) =>
+    table(tableName)?.columns.find((c) => c.name === colName);
+
+  // Table-level descriptions
+  const users = table("users");
+  assert(
+    users?.description != null && users.description.length > 0,
+    "users.description is populated"
+  );
+
+  const orders = table("orders");
+  assert(
+    orders?.description != null && orders.description.length > 0,
+    "orders.description is populated"
+  );
+
+  // Column-level descriptions (users.email has @description)
+  const email = col("users", "email");
+  assert(
+    email?.description === "Primary email address used for authentication",
+    `users.email.description correct (got "${email?.description}")`
+  );
+
+  const displayName = col("users", "display_name");
+  assert(
+    displayName?.description === "User-facing display name",
+    `users.display_name.description correct (got "${displayName?.description}")`
+  );
+
+  // Columns without @description should have no description
+  const userId = col("users", "id");
+  assert(
+    userId?.description == null,
+    "users.id.description is null (no annotation)"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 8b. Structured type decomposition (maxLength, precision, scale, isMaxLength)
 // ---------------------------------------------------------------------------
 console.log("\n--- Structured Type Properties ---");
 
@@ -384,6 +447,141 @@ if (existsSync(metadataPath)) {
   assert(
     orderUserId?.foreignKey?.table === "users",
     "orders.user_id FK references users"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 11. Self-referencing FK (categories)
+// ---------------------------------------------------------------------------
+console.log("\n--- Self-Referencing FK ---");
+
+if (existsSync(analysisPath)) {
+  const raw = readFileSync(analysisPath, "utf8").replace(/^\uFEFF/, "");
+  const analysis = JSON.parse(raw);
+  const categories = analysis.tables.find((t) => t.name === "categories");
+
+  assert(categories != null, "analysis.json contains categories table");
+  if (categories) {
+    assert(
+      categories.category === "commerce",
+      `categories.category = "commerce" (got "${categories.category}")`
+    );
+    assert(
+      categories.description != null && categories.description.length > 0,
+      "categories.description is populated"
+    );
+
+    // Self-referencing FK
+    const selfRef = categories.foreignKeyReferences?.find(
+      (fk) => fk.referencedTable === "categories"
+    );
+    assert(selfRef != null, "categories has self-referencing FK");
+    assert(
+      JSON.stringify(selfRef?.columns) === JSON.stringify(["parent_id"]),
+      `Self-ref FK column = [parent_id] (got ${JSON.stringify(selfRef?.columns)})`
+    );
+    assert(
+      JSON.stringify(selfRef?.referencedColumns) === JSON.stringify(["id"]),
+      `Self-ref FK references [id] (got ${JSON.stringify(selfRef?.referencedColumns)})`
+    );
+
+    // Self-referencing child
+    assert(
+      categories.childTables?.includes("categories"),
+      "categories.childTables includes itself"
+    );
+
+    // Column descriptions
+    assert(
+      categories.columnDescriptions?.parent_id ===
+        "Parent category for hierarchy; NULL for root categories",
+      `categories.columnDescriptions.parent_id correct (got "${categories.columnDescriptions?.parent_id}")`
+    );
+  }
+}
+
+// Cascade trigger for self-referencing FK
+const categoriesCascade = join(
+  generatedDir,
+  "trg_categories_cascade_soft_delete.sql"
+);
+if (existsSync(categoriesCascade)) {
+  const content = readFileSync(categoriesCascade, "utf8");
+  assert(
+    content.includes("parent_id IN"),
+    "Categories cascade trigger cascades via parent_id"
+  );
+  assert(
+    content.includes("i.id = d.id"),
+    "Categories cascade trigger joins on PK (id)"
+  );
+}
+
+// Reactivation guard for self-referencing FK
+const categoriesGuard = join(
+  generatedDir,
+  "trg_categories_reactivation_guard.sql"
+);
+if (existsSync(categoriesGuard)) {
+  const content = readFileSync(categoriesGuard, "utf8");
+  assert(
+    content.includes("i.parent_id = p.id"),
+    "Categories guard checks parent is active via parent_id"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 12. Block comment annotations (currencies)
+// ---------------------------------------------------------------------------
+console.log("\n--- Block Comment Annotations ---");
+
+if (existsSync(analysisPath)) {
+  const raw = readFileSync(analysisPath, "utf8").replace(/^\uFEFF/, "");
+  const analysis = JSON.parse(raw);
+  const currencies = analysis.tables.find((t) => t.name === "currencies");
+
+  assert(currencies != null, "analysis.json contains currencies table");
+  if (currencies) {
+    // Block comments should produce identical results to single-line
+    assert(
+      currencies.category === "commerce",
+      `currencies.category = "commerce" (got "${currencies.category}")`
+    );
+    assert(
+      currencies.description != null && currencies.description.length > 0,
+      "currencies.description is populated (block comment)"
+    );
+    assert(
+      currencies.description.includes("ISO 4217"),
+      `currencies.description contains "ISO 4217" (got "${currencies.description}")`
+    );
+
+    // Natural key (CHAR(3))
+    assert(
+      JSON.stringify(currencies.primaryKeyColumns) ===
+        JSON.stringify(["code"]),
+      `currencies PK = [code] (got ${JSON.stringify(currencies.primaryKeyColumns)})`
+    );
+
+    // Column descriptions from trailing comments
+    assert(
+      currencies.columnDescriptions?.code ===
+        "ISO 4217 three-letter currency code",
+      `currencies.columnDescriptions.code correct (got "${currencies.columnDescriptions?.code}")`
+    );
+    assert(
+      currencies.columnDescriptions?.name === "Official currency name",
+      `currencies.columnDescriptions.name correct (got "${currencies.columnDescriptions?.name}")`
+    );
+  }
+}
+
+// Purge procedure should handle currencies with natural key
+if (existsSync(purgeFile)) {
+  const purge = readFileSync(purgeFile, "utf8");
+  assert(
+    purge.includes("t.code = h.code"),
+    "Purge proc joins currencies on natural key (code)"
   );
 }
 

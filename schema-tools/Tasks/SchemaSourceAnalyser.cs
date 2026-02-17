@@ -1,7 +1,9 @@
 ﻿using System.Reflection;
-using System.Text.Json;
 using Microsoft.Build.Framework;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
+using SchemaTools.Annotations;
+using SchemaTools.Configuration;
+using SchemaTools.Diagnostics;
 using SchemaTools.Models;
 using SchemaTools.Utilities;
 using SchemaTools.Visitors;
@@ -10,7 +12,7 @@ using MSTask = Microsoft.Build.Utilities.Task;
 namespace SchemaTools.Tasks;
 
 /// <summary>
-/// Pre-build MSBuild task that analyses SQL source files to extract patterns 
+/// Pre-build MSBuild task that analyses SQL source files to extract patterns
 /// needed for code generation (triggers, procedures). This runs BEFORE SqlBuild.
 /// For authoritative metadata extraction, use SchemaMetadataExtractor post-build.
 /// </summary>
@@ -50,7 +52,7 @@ public class SchemaSourceAnalyser : MSTask
   public string ConfigFile { get; set; } = string.Empty;
 
   // Fallback defaults (used when config file not provided)
-  public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
+  public string SqlServerVersion { get; set; } = nameof(Models.SqlServerVersion.Sql170);
   public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
 
   // Testing support
@@ -78,8 +80,43 @@ public class SchemaSourceAnalyser : MSTask
 
       Log.LogMessage(MessageImportance.High, $"Analysing {sqlFiles.Count} SQL file(s)...");
 
-      TSqlParser parser = ParserFactory.CreateParser(_config.SqlServerVersion);
-      var analysis = new SourceAnalysisResult
+      OperationResult<TSqlParser> parserResult = ParserFactory.CreateParser(_config.SqlServerVersion);
+      if (!parserResult.IsSuccess)
+      {
+        DiagnosticReporter.Report(Log, parserResult.Diagnostics);
+        return false;
+      }
+      TSqlParser parser = parserResult.Value;
+
+      var tableList = new List<TableAnalysis>();
+      var triggerList = new List<ExistingTrigger>();
+      var viewList = new List<ExistingView>();
+      int tablesParsed = 0;
+
+      foreach (string sqlFile in sqlFiles)
+      {
+        try
+        {
+          TableAnalysis? tableAnalysis = AnalyseTableFile(sqlFile, parser);
+          if (tableAnalysis != null)
+          {
+            tableList.Add(tableAnalysis);
+            tablesParsed++;
+          }
+
+          DiscoverExistingTriggers(sqlFile, parser, triggerList);
+          DiscoverExistingViews(sqlFile, parser, viewList);
+        }
+        catch (Exception ex)
+        {
+          Log.LogWarning($"Failed to analyse {Path.GetFileName(sqlFile)}: {ex.Message}");
+        }
+      }
+
+      tableList = BuildForeignKeyGraph(tableList);
+      tableList = DetectLeafTables(tableList);
+
+      SourceAnalysisResult analysis = new SourceAnalysisResult
       {
         Version = GetAssemblyVersion(),
         AnalysedAt = DateTime.UtcNow,
@@ -100,49 +137,13 @@ public class SchemaSourceAnalyser : MSTask
         Features = new FeatureFlags
         {
           GenerateReactivationGuards = _config.Features.GenerateReactivationGuards
-        }
+        },
+        Tables = tableList,
+        ExistingTriggers = triggerList,
+        ExistingViews = viewList
       };
 
-      int tablesParsed = 0;
-
-      foreach (string sqlFile in sqlFiles)
-      {
-        try
-        {
-          TableAnalysis? tableAnalysis = AnalyseTableFile(sqlFile, parser);
-          if (tableAnalysis != null)
-          {
-            analysis.Tables.Add(tableAnalysis);
-            tablesParsed++;
-          }
-
-          DiscoverExistingTriggers(sqlFile, parser, analysis);
-          DiscoverExistingViews(sqlFile, parser, analysis);
-        }
-        catch (Exception ex)
-        {
-          Log.LogWarning($"Failed to analyse {Path.GetFileName(sqlFile)}: {ex.Message}");
-        }
-      }
-
-      BuildForeignKeyGraph(analysis);
-      DetectLeafTables(analysis);
-
-      string? outputDir = Path.GetDirectoryName(AnalysisOutput);
-      if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
-      {
-        Directory.CreateDirectory(outputDir);
-      }
-
-      var options = new JsonSerializerOptions
-      {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-      };
-
-      string json = JsonSerializer.Serialize(analysis, options);
-      File.WriteAllText(AnalysisOutput, json, System.Text.Encoding.UTF8);
+      GenerationUtilities.WriteJson(AnalysisOutput, analysis);
 
       Log.LogMessage(MessageImportance.High, string.Empty);
       Log.LogMessage(MessageImportance.High, $"+ Analysed {tablesParsed} tables");
@@ -172,28 +173,15 @@ public class SchemaSourceAnalyser : MSTask
 
   private void LoadConfiguration()
   {
-    if (TestConfig != null)
+    SchemaToolsConfig fallback = new()
     {
-      _config = TestConfig;
-      return;
-    }
+      SqlServerVersion = Enum.TryParse<Models.SqlServerVersion>(SqlServerVersion, out Models.SqlServerVersion parsed)
+        ? parsed
+        : Models.SqlServerVersion.Sql170,
+      DefaultSchema = DefaultSchema
+    };
 
-    if (!string.IsNullOrEmpty(ConfigFile) && File.Exists(ConfigFile))
-    {
-      string json = File.ReadAllText(ConfigFile);
-      _config = JsonSerializer.Deserialize<SchemaToolsConfig>(json, new JsonSerializerOptions
-      {
-        PropertyNameCaseInsensitive = true
-      }) ?? new SchemaToolsConfig();
-    }
-    else
-    {
-      _config = new SchemaToolsConfig
-      {
-        SqlServerVersion = SqlServerVersion,
-        DefaultSchema = DefaultSchema
-      };
-    }
+    _config = ConfigurationLoader.Load(ConfigFile, TestConfig, fallback);
   }
 
   private List<string> ResolveSqlFiles()
@@ -245,49 +233,82 @@ public class SchemaSourceAnalyser : MSTask
       return null;
     }
 
-    string? category = SqlCommentParser.ExtractCategory(sqlText);
+    OperationResult<ParsedAnnotations> annotationResult = AnnotationParser.Parse(sqlText, filePath);
+    ParsedAnnotations annotations = annotationResult.IsSuccess || !annotationResult.HasErrors
+      ? annotationResult.Value
+      : new ParsedAnnotations(null, null, []);
+
+    // Report annotation diagnostics (warnings/errors) via MSBuild
+    if (annotationResult.Diagnostics.Count > 0)
+    {
+      DiagnosticReporter.Report(Log, annotationResult.Diagnostics);
+    }
+
+    string? category = annotations.Category;
     SchemaToolsConfig effective = _config.ResolveForTable(visitor.TableName!, category);
 
-    var analysis = new TableAnalysis
+    // Wire column-level descriptions
+    Dictionary<string, string>? columnDescriptions = null;
+    if (annotations.ColumnAnnotations.Count > 0)
     {
-      Name = visitor.TableName!,
-      Schema = visitor.SchemaName ?? effective.DefaultSchema,
-      Category = category,
-      SourceFile = filePath
-    };
+      var colDescs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+      foreach (ColumnAnnotation colAnnotation in annotations.ColumnAnnotations)
+      {
+        if (!string.IsNullOrEmpty(colAnnotation.Description))
+        {
+          colDescs[colAnnotation.ColumnName] = colAnnotation.Description!;
+        }
+      }
+
+      if (colDescs.Count > 0)
+      {
+        columnDescriptions = colDescs;
+      }
+    }
 
     string activeColumnName = effective.Columns.Active;
     bool hasActiveColumn = visitor.ColumnDefinitions.Any(c =>
       string.Equals(c.ColumnIdentifier.Value, activeColumnName, StringComparison.OrdinalIgnoreCase));
 
-    analysis.HasActiveColumn = hasActiveColumn;
-    analysis.HasTemporalVersioning = visitor.HasTemporalVersioning;
+    // Temporal versioning
+    string? historyTable = null;
+    string? validFromColumn = null;
+    string? validToColumn = null;
 
     if (visitor.HasTemporalVersioning)
     {
       string historySchema = visitor.HistorySchemaName ?? effective.DefaultSchema;
       if (!string.IsNullOrEmpty(visitor.HistoryTableName))
       {
-        analysis.HistoryTable = $"[{historySchema}].[{visitor.HistoryTableName}]";
+        historyTable = $"[{historySchema}].[{visitor.HistoryTableName}]";
       }
-      analysis.ValidFromColumn = effective.Columns.ValidFrom;
-      analysis.ValidToColumn = effective.Columns.ValidTo;
+      validFromColumn = effective.Columns.ValidFrom;
+      validToColumn = effective.Columns.ValidTo;
     }
+
+    // Soft-delete detection
+    bool hasSoftDelete = false;
+    string? softDeleteActiveColumn = null;
+    SoftDeleteMode softDeleteMode = SoftDeleteMode.Cascade;
+    bool reactivationCascade = false;
+    int reactivationCascadeToleranceMs = SchemaToolsDefaults.ReactivationCascadeToleranceMs;
 
     if (effective.Features.EnableSoftDelete && hasActiveColumn && visitor.HasTemporalVersioning)
     {
-      analysis.HasSoftDelete = true;
-      analysis.ActiveColumnName = activeColumnName;
-      analysis.SoftDeleteMode = effective.Features.SoftDeleteMode;
-      analysis.ReactivationCascade = effective.Features.ReactivationCascade;
-      analysis.ReactivationCascadeToleranceMs = effective.Features.ReactivationCascadeToleranceMs;
+      hasSoftDelete = true;
+      softDeleteActiveColumn = activeColumnName;
+      softDeleteMode = effective.Features.SoftDeleteMode;
+      reactivationCascade = effective.Features.ReactivationCascade;
+      reactivationCascadeToleranceMs = effective.Features.ReactivationCascadeToleranceMs;
     }
 
+    // Primary key columns
+    var primaryKeyColumns = new List<string>();
     foreach (ConstraintDefinition constraint in visitor.Constraints)
     {
       if (constraint is UniqueConstraintDefinition unique && unique.IsPrimaryKey)
       {
-        analysis.PrimaryKeyColumns = unique.Columns
+        primaryKeyColumns = unique.Columns
           .Select(c => c.Column.MultiPartIdentifier.Identifiers.Last().Value)
           .ToList();
         break;
@@ -295,7 +316,7 @@ public class SchemaSourceAnalyser : MSTask
     }
 
     // Inline PK constraints (fallback for single-column syntax)
-    if (analysis.PrimaryKeyColumns.Count == 0)
+    if (primaryKeyColumns.Count == 0)
     {
       foreach (ColumnDefinition colDef in visitor.ColumnDefinitions)
       {
@@ -303,18 +324,20 @@ public class SchemaSourceAnalyser : MSTask
         {
           if (constraint is UniqueConstraintDefinition { IsPrimaryKey: true })
           {
-            analysis.PrimaryKeyColumns.Add(colDef.ColumnIdentifier.Value);
+            primaryKeyColumns.Add(colDef.ColumnIdentifier.Value);
             break;
           }
         }
       }
     }
 
+    // Foreign key references
+    var foreignKeyReferences = new List<ForeignKeyRef>();
     foreach (ConstraintDefinition constraint in visitor.Constraints)
     {
       if (constraint is ForeignKeyConstraintDefinition fk)
       {
-        analysis.ForeignKeyReferences.Add(new ForeignKeyRef
+        foreignKeyReferences.Add(new ForeignKeyRef
         {
           ReferencedTable = fk.ReferenceTableName.BaseIdentifier.Value,
           ReferencedSchema = fk.ReferenceTableName.SchemaIdentifier?.Value ?? _config.DefaultSchema,
@@ -325,10 +348,30 @@ public class SchemaSourceAnalyser : MSTask
       }
     }
 
-    return analysis;
+    return new TableAnalysis
+    {
+      Name = visitor.TableName!,
+      Schema = visitor.SchemaName ?? effective.DefaultSchema,
+      Category = category,
+      Description = annotations.Description,
+      SourceFile = filePath,
+      ColumnDescriptions = columnDescriptions,
+      HasActiveColumn = hasActiveColumn,
+      HasTemporalVersioning = visitor.HasTemporalVersioning,
+      HistoryTable = historyTable,
+      ValidFromColumn = validFromColumn,
+      ValidToColumn = validToColumn,
+      HasSoftDelete = hasSoftDelete,
+      ActiveColumnName = softDeleteActiveColumn,
+      SoftDeleteMode = softDeleteMode,
+      ReactivationCascade = reactivationCascade,
+      ReactivationCascadeToleranceMs = reactivationCascadeToleranceMs,
+      PrimaryKeyColumns = primaryKeyColumns,
+      ForeignKeyReferences = foreignKeyReferences
+    };
   }
 
-  private void DiscoverExistingTriggers(string filePath, TSqlParser parser, SourceAnalysisResult analysis)
+  private void DiscoverExistingTriggers(string filePath, TSqlParser parser, List<ExistingTrigger> triggers)
   {
     string sqlText = File.ReadAllText(filePath);
     using var reader = new StringReader(sqlText);
@@ -352,7 +395,7 @@ public class SchemaSourceAnalyser : MSTask
 
     foreach (DiscoveredTrigger trigger in visitor.Triggers)
     {
-      analysis.ExistingTriggers.Add(new ExistingTrigger
+      triggers.Add(new ExistingTrigger
       {
         Name = trigger.Name,
         Schema = trigger.Schema ?? _config.DefaultSchema,
@@ -369,7 +412,7 @@ public class SchemaSourceAnalyser : MSTask
     }
   }
 
-  private void DiscoverExistingViews(string filePath, TSqlParser parser, SourceAnalysisResult analysis)
+  private void DiscoverExistingViews(string filePath, TSqlParser parser, List<ExistingView> views)
   {
     string sqlText = File.ReadAllText(filePath);
     using var reader = new StringReader(sqlText);
@@ -393,7 +436,7 @@ public class SchemaSourceAnalyser : MSTask
 
     foreach (DiscoveredView view in visitor.Views)
     {
-      analysis.ExistingViews.Add(new ExistingView
+      views.Add(new ExistingView
       {
         Name = view.Name,
         Schema = view.Schema ?? _config.DefaultSchema,
@@ -409,36 +452,67 @@ public class SchemaSourceAnalyser : MSTask
     }
   }
 
-  private static void BuildForeignKeyGraph(SourceAnalysisResult analysis)
+  private static List<TableAnalysis> BuildForeignKeyGraph(List<TableAnalysis> tables)
   {
-    var tablesByName = analysis.Tables.ToDictionary(
-      t => $"[{t.Schema}].[{t.Name}]",
-      t => t,
-      StringComparer.OrdinalIgnoreCase);
+    // Build a map from qualified name to index for parent lookup
+    var indexByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    for (int i = 0; i < tables.Count; i++)
+    {
+      indexByName[$"[{tables[i].Schema}].[{tables[i].Name}]"] = i;
+    }
+
+    // Accumulate child table names per parent index
+    var childrenByIndex = new Dictionary<int, List<string>>();
 
     // For each FK, record the parent table's children.
     // A child with multiple FKs to the same parent (e.g. created_by and updated_by
     // both referencing users.id) must only appear once in the parent's ChildTables.
-    foreach (TableAnalysis table in analysis.Tables)
+    foreach (TableAnalysis table in tables)
     {
       foreach (ForeignKeyRef fkRef in table.ForeignKeyReferences)
       {
         string parentKey = $"[{fkRef.ReferencedSchema}].[{fkRef.ReferencedTable}]";
-        if (tablesByName.TryGetValue(parentKey, out TableAnalysis? parentTable)
-            && !parentTable.ChildTables.Contains(table.Name))
+        if (indexByName.TryGetValue(parentKey, out int parentIndex))
         {
-          parentTable.ChildTables.Add(table.Name);
+          if (!childrenByIndex.TryGetValue(parentIndex, out List<string>? children))
+          {
+            children = new List<string>();
+            childrenByIndex[parentIndex] = children;
+          }
+
+          if (!children.Contains(table.Name))
+          {
+            children.Add(table.Name);
+          }
         }
       }
     }
+
+    // Produce new list with ChildTables populated
+    var result = new List<TableAnalysis>(tables.Count);
+    for (int i = 0; i < tables.Count; i++)
+    {
+      if (childrenByIndex.TryGetValue(i, out List<string>? children))
+      {
+        result.Add(tables[i] with { ChildTables = children });
+      }
+      else
+      {
+        result.Add(tables[i]);
+      }
+    }
+
+    return result;
   }
 
-  private static void DetectLeafTables(SourceAnalysisResult analysis)
+  private static List<TableAnalysis> DetectLeafTables(List<TableAnalysis> tables)
   {
-    foreach (TableAnalysis table in analysis.Tables)
+    var result = new List<TableAnalysis>(tables.Count);
+    foreach (TableAnalysis table in tables)
     {
-      table.IsLeafTable = table.ChildTables.Count == 0;
+      result.Add(table with { IsLeafTable = table.ChildTables.Count == 0 });
     }
+    return result;
   }
 
   private static string GetAssemblyVersion()

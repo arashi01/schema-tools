@@ -1,4 +1,5 @@
-﻿using SchemaTools.Models;
+﻿using SchemaTools.Configuration;
+using SchemaTools.Models;
 using SchemaTools.Tasks;
 
 namespace SchemaTools.Tests.Tasks;
@@ -296,7 +297,9 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
   public void Execute_ForeignKeyWithCascadeDelete_RendersAction()
   {
     SchemaMetadata metadata = CreateMetadata();
-    metadata.Tables[0].Constraints!.ForeignKeys[0].OnDelete = "Cascade";
+    TableMetadata users = metadata.Tables[0];
+    ForeignKeyConstraint fk = users.Constraints.ForeignKeys[0] with { OnDelete = ForeignKeyAction.Cascade };
+    metadata = metadata with { Tables = [users with { Constraints = users.Constraints with { ForeignKeys = [fk] } }, metadata.Tables[1]] };
 
     string md = RunGenerator(metadata: metadata);
 
@@ -307,7 +310,9 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
   public void Execute_ForeignKeyWithSetNull_RendersAction()
   {
     SchemaMetadata metadata = CreateMetadata();
-    metadata.Tables[0].Constraints!.ForeignKeys[0].OnUpdate = "SetNull";
+    TableMetadata users = metadata.Tables[0];
+    ForeignKeyConstraint fk = users.Constraints.ForeignKeys[0] with { OnUpdate = ForeignKeyAction.SetNull };
+    metadata = metadata with { Tables = [users with { Constraints = users.Constraints with { ForeignKeys = [fk] } }, metadata.Tables[1]] };
 
     string md = RunGenerator(metadata: metadata);
 
@@ -318,34 +323,9 @@ public class MarkdownDocumentationGeneratorTests : IDisposable
   public void Execute_ForeignKeyWithNoAction_OmitsAction()
   {
     SchemaMetadata metadata = CreateMetadata();
-    metadata.Tables[0].Constraints!.ForeignKeys[0].OnDelete = "NoAction";
-    metadata.Tables[0].Constraints!.ForeignKeys[0].OnUpdate = "NoAction";
-
-    string md = RunGenerator(metadata: metadata);
-
-    md.Should().NotContain("ON DELETE");
-    md.Should().NotContain("ON UPDATE");
-  }
-
-  [Fact]
-  public void Execute_ForeignKeyWithNotSpecified_OmitsAction()
-  {
-    SchemaMetadata metadata = CreateMetadata();
-    metadata.Tables[0].Constraints!.ForeignKeys[0].OnDelete = "NotSpecified";
-    metadata.Tables[0].Constraints!.ForeignKeys[0].OnUpdate = "NotSpecified";
-
-    string md = RunGenerator(metadata: metadata);
-
-    md.Should().NotContain("ON DELETE");
-    md.Should().NotContain("ON UPDATE");
-  }
-
-  [Fact]
-  public void Execute_ForeignKeyWithNullActions_OmitsAction()
-  {
-    SchemaMetadata metadata = CreateMetadata();
-    metadata.Tables[0].Constraints!.ForeignKeys[0].OnDelete = null;
-    metadata.Tables[0].Constraints!.ForeignKeys[0].OnUpdate = null;
+    TableMetadata users = metadata.Tables[0];
+    ForeignKeyConstraint fk = users.Constraints.ForeignKeys[0] with { OnDelete = ForeignKeyAction.NoAction, OnUpdate = ForeignKeyAction.NoAction };
+    metadata = metadata with { Tables = [users with { Constraints = users.Constraints with { ForeignKeys = [fk] } }, metadata.Tables[1]] };
 
     string md = RunGenerator(metadata: metadata);
 

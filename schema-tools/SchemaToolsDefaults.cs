@@ -6,7 +6,6 @@
 public static class SchemaToolsDefaults
 {
   public const string MetadataVersion = "1.0.0";
-  public const string SqlServerVersion = "Sql170";
   public const string DefaultSchema = "dbo";
 
   public const string ActiveColumn = "record_active";
@@ -24,8 +23,6 @@ public static class SchemaToolsDefaults
   public const string PurgeProcedureName = "usp_purge_soft_deleted";
   public const int DefaultGracePeriodDays = 90;
   public const int DefaultBatchSize = 1000;
-
-  public const string ForeignKeyOnDeleteDefault = "NoAction";
 
   public const string ViewNamingPattern = "vw_{table}";
   public const string DeletedViewNamingPattern = "vw_{table}_deleted";

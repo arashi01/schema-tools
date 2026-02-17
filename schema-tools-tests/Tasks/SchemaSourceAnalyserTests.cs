@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using SchemaTools.Configuration;
 using SchemaTools.Models;
 using SchemaTools.Tasks;
 
@@ -37,7 +38,7 @@ public class SchemaSourceAnalyserTests : IDisposable
     TestConfig = config ?? new SchemaToolsConfig
     {
       DefaultSchema = "dbo",
-      SqlServerVersion = "Sql170",
+      SqlServerVersion = Models.SqlServerVersion.Sql170,
       Features = new FeatureConfig { EnableSoftDelete = true }
     },
     BuildEngine = _buildEngine
@@ -531,7 +532,7 @@ CREATE TABLE [dbo].[meta]([id] UNIQUEIDENTIFIER PRIMARY KEY);
     SourceAnalysisResult? analysis = ReadAnalysisResult();
 
     analysis!.Version.Should().NotBeNullOrEmpty();
-    analysis.SqlServerVersion.Should().Be("Sql170");
+    analysis.SqlServerVersion.Should().Be(Models.SqlServerVersion.Sql170);
     analysis.DefaultSchema.Should().Be("dbo");
     analysis.AnalysedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
   }
@@ -631,7 +632,7 @@ CREATE TABLE [dbo].[child]
     SourceAnalysisResult? analysis = ReadAnalysisResult();
     TableAnalysis child = analysis!.Tables.Single(t => t.Name == "child");
     child.ForeignKeyReferences.Should().ContainSingle()
-      .Which.OnDelete.Should().Be("Cascade");
+      .Which.OnDelete.Should().Be(ForeignKeyAction.Cascade);
   }
 
   [Fact]
@@ -656,7 +657,7 @@ CREATE TABLE [dbo].[child]
     SourceAnalysisResult? analysis = ReadAnalysisResult();
     TableAnalysis child = analysis!.Tables.Single(t => t.Name == "child");
     child.ForeignKeyReferences.Should().ContainSingle()
-      .Which.OnDelete.Should().Be("NoAction",
+      .Which.OnDelete.Should().Be(ForeignKeyAction.NoAction,
         "FKs without explicit action should normalise to NoAction, not NotSpecified");
   }
 

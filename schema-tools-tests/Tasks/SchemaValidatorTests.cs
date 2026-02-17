@@ -1,11 +1,18 @@
-﻿using SchemaTools.Models;
+﻿using SchemaTools.Configuration;
+using SchemaTools.Models;
 using SchemaTools.Tasks;
 
 namespace SchemaTools.Tests.Tasks;
 
+/// <summary>
+/// Integration tests for <see cref="SchemaValidator"/> MSBuild task.
+/// These tests exercise the full Execute() pipeline including configuration
+/// loading, metadata injection, validation, and MSBuild error/warning reporting.
+/// Pure validation logic is tested in <see cref="SchemaValidationTests"/>.
+/// </summary>
 public class SchemaValidatorTests
 {
-  private static SchemaToolsConfig CreateConfig(Action<ValidationConfig>? configure = null)
+  private static SchemaToolsConfig CreateConfig(Action<SchemaToolsConfig>? configure = null)
   {
     var config = new SchemaToolsConfig
     {
@@ -21,11 +28,11 @@ public class SchemaValidatorTests
         TreatWarningsAsErrors = false
       }
     };
-    configure?.Invoke(config.Validation);
+    configure?.Invoke(config);
     return config;
   }
 
-  private static TableMetadata CreateTable(string name, Action<TableMetadata>? configure = null)
+  private static TableMetadata CreateTable(string name, Func<TableMetadata, TableMetadata>? configure = null)
   {
     var table = new TableMetadata
     {
@@ -33,18 +40,17 @@ public class SchemaValidatorTests
       Schema = "test",
       PrimaryKey = "id",
       Columns =
-        [
-            new ColumnMetadata { Name = "id", Type = "UNIQUEIDENTIFIER", IsPrimaryKey = true },
-                new ColumnMetadata { Name = "record_created_by", Type = "UNIQUEIDENTIFIER" },
-                new ColumnMetadata { Name = "record_updated_by", Type = "UNIQUEIDENTIFIER" }
-        ],
+      [
+        new ColumnMetadata { Name = "id", Type = "UNIQUEIDENTIFIER", IsPrimaryKey = true },
+        new ColumnMetadata { Name = "record_created_by", Type = "UNIQUEIDENTIFIER" },
+        new ColumnMetadata { Name = "record_updated_by", Type = "UNIQUEIDENTIFIER" }
+      ],
       Constraints = new ConstraintsCollection
       {
         PrimaryKey = new PrimaryKeyConstraint { Name = $"pk_{name}", Columns = ["id"] }
       }
     };
-    configure?.Invoke(table);
-    return table;
+    return configure != null ? configure(table) : table;
   }
 
   private static SchemaMetadata CreateMetadata(params TableMetadata[] tables) => new()
@@ -54,8 +60,8 @@ public class SchemaValidatorTests
     Tables = [.. tables]
   };
 
-  private (bool success, SchemaValidator task) RunValidator(
-      SchemaMetadata metadata, SchemaToolsConfig? config = null)
+  private static (bool success, SchemaValidator task) RunValidator(
+    SchemaMetadata metadata, SchemaToolsConfig? config = null)
   {
     var task = new SchemaValidator
     {
@@ -68,303 +74,229 @@ public class SchemaValidatorTests
     return (result, task);
   }
 
-  // --- FK validation -------------------------------------------------------
+  // --- FK integration through Execute() ------------------------------------
 
   [Fact]
-  public void Validate_ForeignKeyToExistingTable_Passes()
+  public void ValidFK_Passes()
   {
     TableMetadata parent = CreateTable("parent");
-    TableMetadata child = CreateTable("child", t =>
+    TableMetadata child = CreateTable("child", t => t with
     {
-      t.Constraints.ForeignKeys.Add(new ForeignKeyConstraint
+      Columns = [.. t.Columns, new ColumnMetadata { Name = "parent_id", Type = "UNIQUEIDENTIFIER" }],
+      Constraints = t.Constraints with
       {
-        Name = "fk_child_parent",
-        Columns = ["parent_id"],
-        ReferencedTable = "parent",
-        ReferencedColumns = ["id"]
-      });
-      t.Columns.Add(new ColumnMetadata { Name = "parent_id", Type = "UNIQUEIDENTIFIER" });
+        ForeignKeys =
+        [
+          new ForeignKeyConstraint
+          {
+            Name = "fk_child_parent",
+            Columns = ["parent_id"],
+            ReferencedTable = "parent",
+            ReferencedColumns = ["id"]
+          }
+        ]
+      }
     });
 
-    (bool success, SchemaValidator _) = RunValidator(CreateMetadata(parent, child));
+    (bool success, _) = RunValidator(CreateMetadata(parent, child));
     success.Should().BeTrue();
   }
 
   [Fact]
-  public void Validate_ForeignKeyToMissingTable_ReportsError()
+  public void FKToMissingTable_FailsWithError()
   {
-    TableMetadata table = CreateTable("orphan", t =>
+    TableMetadata table = CreateTable("orphan", t => t with
     {
-      t.Constraints.ForeignKeys.Add(new ForeignKeyConstraint
+      Columns = [.. t.Columns, new ColumnMetadata { Name = "ref_id", Type = "UNIQUEIDENTIFIER" }],
+      Constraints = t.Constraints with
       {
-        Name = "fk_orphan_missing",
-        Columns = ["ref_id"],
-        ReferencedTable = "nonexistent",
-        ReferencedColumns = ["id"]
-      });
-      t.Columns.Add(new ColumnMetadata { Name = "ref_id", Type = "UNIQUEIDENTIFIER" });
+        ForeignKeys =
+        [
+          new ForeignKeyConstraint
+          {
+            Name = "fk_orphan_missing",
+            Columns = ["ref_id"],
+            ReferencedTable = "nonexistent",
+            ReferencedColumns = ["id"]
+          }
+        ]
+      }
     });
 
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
+    (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table));
     success.Should().BeFalse();
     task.ValidationErrors.Should().ContainMatch("*references non-existent table*");
   }
 
-  [Fact]
-  public void Validate_ForeignKeyToMissingColumn_ReportsError()
-  {
-    TableMetadata parent = CreateTable("parent");
-    TableMetadata child = CreateTable("child", t =>
-    {
-      t.Constraints.ForeignKeys.Add(new ForeignKeyConstraint
-      {
-        Name = "fk_child_parent",
-        Columns = ["parent_id"],
-        ReferencedTable = "parent",
-        ReferencedColumns = ["nonexistent_col"]
-      });
-    });
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(parent, child));
-    success.Should().BeFalse();
-    task.ValidationErrors.Should().ContainMatch("*references non-existent column*");
-  }
+  // --- Circular FK through Execute() ---------------------------------------
 
   [Fact]
-  public void Validate_ForeignKeyColumnCountMismatch_ReportsError()
+  public void CircularFKs_FailsWithError()
   {
-    TableMetadata parent = CreateTable("parent");
-    TableMetadata child = CreateTable("child", t =>
+    TableMetadata a = CreateTable("table_a", t => t with
     {
-      t.Constraints.ForeignKeys.Add(new ForeignKeyConstraint
+      Columns = [.. t.Columns, new ColumnMetadata { Name = "b_id", Type = "UNIQUEIDENTIFIER" }],
+      Constraints = t.Constraints with
       {
-        Name = "fk_child_parent",
-        Columns = ["a", "b"],
-        ReferencedTable = "parent",
-        ReferencedColumns = ["id"]
-      });
+        ForeignKeys =
+        [
+          new ForeignKeyConstraint
+          {
+            Name = "fk_table_a_b",
+            Columns = ["b_id"],
+            ReferencedTable = "table_b",
+            ReferencedColumns = ["id"]
+          }
+        ]
+      }
     });
 
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(parent, child));
-    success.Should().BeFalse();
-    task.ValidationErrors.Should().ContainMatch("*mismatched column counts*");
-  }
-
-  // --- Circular FK detection -----------------------------------------------
-
-  [Fact]
-  public void Validate_CircularForeignKeys_ReportsError()
-  {
-    TableMetadata a = CreateTable("table_a", t =>
+    TableMetadata b = CreateTable("table_b", t => t with
     {
-      t.Constraints.ForeignKeys.Add(new ForeignKeyConstraint
+      Columns = [.. t.Columns, new ColumnMetadata { Name = "a_id", Type = "UNIQUEIDENTIFIER" }],
+      Constraints = t.Constraints with
       {
-        Name = "fk_table_a_b",
-        Columns = ["b_id"],
-        ReferencedTable = "table_b",
-        ReferencedColumns = ["id"]
-      });
-      t.Columns.Add(new ColumnMetadata { Name = "b_id", Type = "UNIQUEIDENTIFIER" });
+        ForeignKeys =
+        [
+          new ForeignKeyConstraint
+          {
+            Name = "fk_table_b_a",
+            Columns = ["a_id"],
+            ReferencedTable = "table_a",
+            ReferencedColumns = ["id"]
+          }
+        ]
+      }
     });
 
-    TableMetadata b = CreateTable("table_b", t =>
-    {
-      t.Constraints.ForeignKeys.Add(new ForeignKeyConstraint
-      {
-        Name = "fk_table_b_a",
-        Columns = ["a_id"],
-        ReferencedTable = "table_a",
-        ReferencedColumns = ["id"]
-      });
-      t.Columns.Add(new ColumnMetadata { Name = "a_id", Type = "UNIQUEIDENTIFIER" });
-    });
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(a, b));
+    (bool success, SchemaValidator task) = RunValidator(CreateMetadata(a, b));
     success.Should().BeFalse();
     task.ValidationErrors.Should().ContainMatch("*Circular foreign key*");
   }
 
-  // --- Polymorphic validation ----------------------------------------------
+  // --- Polymorphic through Execute() ---------------------------------------
 
   [Fact]
-  public void Validate_PolymorphicWithCheckConstraint_Passes()
+  public void PolymorphicWithCheckConstraint_Passes()
   {
-    TableMetadata table = CreateTable("notes", t =>
+    TableMetadata table = CreateTable("notes", t => t with
     {
-      t.IsPolymorphic = true;
-      t.PolymorphicOwner = new PolymorphicOwnerInfo
+      IsPolymorphic = true,
+      PolymorphicOwner = new PolymorphicOwnerInfo
       {
         TypeColumn = "owner_type",
         IdColumn = "owner_id",
         AllowedTypes = ["user", "company"]
-      };
-      t.Columns.Add(new ColumnMetadata { Name = "owner_type", Type = "VARCHAR(20)" });
-      t.Columns.Add(new ColumnMetadata { Name = "owner_id", Type = "UNIQUEIDENTIFIER" });
-      t.Constraints.CheckConstraints.Add(new CheckConstraint
+      },
+      Columns =
+      [
+        .. t.Columns,
+        new ColumnMetadata { Name = "owner_type", Type = "VARCHAR(20)" },
+        new ColumnMetadata { Name = "owner_id", Type = "UNIQUEIDENTIFIER" }
+      ],
+      Constraints = t.Constraints with
       {
-        Name = "ck_notes_owner_type",
-        Expression = "[owner_type] IN ('user', 'company')"
-      });
+        CheckConstraints =
+        [
+          new CheckConstraint
+          {
+            Name = "ck_notes_owner_type",
+            Expression = "[owner_type] IN ('user', 'company')"
+          }
+        ]
+      }
     });
 
-    (bool success, SchemaValidator _) = RunValidator(CreateMetadata(table));
+    (bool success, _) = RunValidator(CreateMetadata(table));
     success.Should().BeTrue();
   }
 
   [Fact]
-  public void Validate_PolymorphicWithoutCheckConstraint_ReportsError()
+  public void PolymorphicWithoutCheckConstraint_FailsWithError()
   {
-    TableMetadata table = CreateTable("notes", t =>
+    TableMetadata table = CreateTable("notes", t => t with
     {
-      t.IsPolymorphic = true;
-      t.PolymorphicOwner = new PolymorphicOwnerInfo
+      IsPolymorphic = true,
+      PolymorphicOwner = new PolymorphicOwnerInfo
       {
         TypeColumn = "owner_type",
         IdColumn = "owner_id",
         AllowedTypes = ["user"]
-      };
-      t.Columns.Add(new ColumnMetadata { Name = "owner_type", Type = "VARCHAR(20)" });
-      t.Columns.Add(new ColumnMetadata { Name = "owner_id", Type = "UNIQUEIDENTIFIER" });
+      },
+      Columns =
+      [
+        .. t.Columns,
+        new ColumnMetadata { Name = "owner_type", Type = "VARCHAR(20)" },
+        new ColumnMetadata { Name = "owner_id", Type = "UNIQUEIDENTIFIER" }
+      ]
     });
 
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
+    (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table));
     success.Should().BeFalse();
     task.ValidationErrors.Should().ContainMatch("*missing CHECK constraint*");
   }
 
-  [Fact]
-  public void Validate_PolymorphicWithNoAllowedTypes_WarnsButPasses()
-  {
-    TableMetadata table = CreateTable("notes", t =>
-    {
-      t.IsPolymorphic = true;
-      t.PolymorphicOwner = new PolymorphicOwnerInfo
-      {
-        TypeColumn = "owner_type",
-        IdColumn = "owner_id",
-        AllowedTypes = [] // empty
-      };
-      t.Columns.Add(new ColumnMetadata { Name = "owner_type", Type = "VARCHAR(20)" });
-      t.Columns.Add(new ColumnMetadata { Name = "owner_id", Type = "UNIQUEIDENTIFIER" });
-      t.Constraints.CheckConstraints.Add(new CheckConstraint
-      {
-        Name = "ck_notes_owner_type",
-        Expression = "[owner_type] IN ('user')"
-      });
-    });
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    success.Should().BeTrue("empty allowed types is a warning, not an error");
-    task.ValidationWarnings.Should().ContainMatch("*no allowed types*");
-  }
-
-  // --- Temporal validation -------------------------------------------------
+  // --- Temporal through Execute() ------------------------------------------
 
   [Fact]
-  public void Validate_TemporalTableWithCorrectStructure_Passes()
+  public void TemporalWithCorrectStructure_Passes()
   {
-    TableMetadata table = CreateTable("events", t =>
+    TableMetadata table = CreateTable("events", t => t with
     {
-      t.HasTemporalVersioning = true;
-      t.HistoryTable = "[test].[events_history]";
-      t.Columns.Add(new ColumnMetadata
-      {
-        Name = "record_valid_from",
-        Type = "DATETIME2(7)",
-        IsGeneratedAlways = true,
-        GeneratedAlwaysType = "RowStart"
-      });
-      t.Columns.Add(new ColumnMetadata
-      {
-        Name = "record_valid_until",
-        Type = "DATETIME2(7)",
-        IsGeneratedAlways = true,
-        GeneratedAlwaysType = "RowEnd"
-      });
+      HasTemporalVersioning = true,
+      HistoryTable = "[test].[events_history]",
+      Columns =
+      [
+        .. t.Columns,
+        new ColumnMetadata
+        {
+          Name = "record_valid_from",
+          Type = "DATETIME2(7)",
+          IsGeneratedAlways = true,
+          GeneratedAlwaysType = GeneratedAlwaysType.RowStart
+        },
+        new ColumnMetadata
+        {
+          Name = "record_valid_until",
+          Type = "DATETIME2(7)",
+          IsGeneratedAlways = true,
+          GeneratedAlwaysType = GeneratedAlwaysType.RowEnd
+        }
+      ]
     });
 
-    (bool success, SchemaValidator _) = RunValidator(CreateMetadata(table));
+    (bool success, _) = RunValidator(CreateMetadata(table));
     success.Should().BeTrue();
   }
 
   [Fact]
-  public void Validate_TemporalMissingValidFrom_ReportsError()
+  public void TemporalMissingValidFrom_FailsWithError()
   {
-    TableMetadata table = CreateTable("events", t =>
+    TableMetadata table = CreateTable("events", t => t with
     {
-      t.HasTemporalVersioning = true;
-      t.HistoryTable = "[test].[events_history]";
-      t.Columns.Add(new ColumnMetadata
-      {
-        Name = "record_valid_until",
-        Type = "DATETIME2(7)",
-        IsGeneratedAlways = true
-      });
+      HasTemporalVersioning = true,
+      HistoryTable = "[test].[events_history]",
+      Columns =
+      [
+        .. t.Columns,
+        new ColumnMetadata
+        {
+          Name = "record_valid_until",
+          Type = "DATETIME2(7)",
+          IsGeneratedAlways = true
+        }
+      ]
     });
 
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
+    (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table));
     success.Should().BeFalse();
     task.ValidationErrors.Should().ContainMatch("*missing 'record_valid_from'*");
   }
 
-  [Fact]
-  public void Validate_TemporalWithoutGeneratedAlways_ReportsError()
-  {
-    TableMetadata table = CreateTable("events", t =>
-    {
-      t.HasTemporalVersioning = true;
-      t.HistoryTable = "[test].[events_history]";
-      t.Columns.Add(new ColumnMetadata
-      {
-        Name = "record_valid_from",
-        Type = "DATETIME2(7)",
-        IsGeneratedAlways = false
-      });
-      t.Columns.Add(new ColumnMetadata
-      {
-        Name = "record_valid_until",
-        Type = "DATETIME2(7)",
-        IsGeneratedAlways = true
-      });
-    });
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    success.Should().BeFalse();
-    task.ValidationErrors.Should().ContainMatch("*GENERATED ALWAYS*");
-  }
+  // --- Audit column through Execute() --------------------------------------
 
   [Fact]
-  public void Validate_TemporalMissingHistoryTable_WarnsButPasses()
-  {
-    TableMetadata table = CreateTable("events", t =>
-    {
-      t.HasTemporalVersioning = true;
-      t.HistoryTable = null;
-      t.Columns.Add(new ColumnMetadata
-      {
-        Name = "record_valid_from",
-        Type = "DATETIME2(7)",
-        IsGeneratedAlways = true,
-        GeneratedAlwaysType = "RowStart"
-      });
-      t.Columns.Add(new ColumnMetadata
-      {
-        Name = "record_valid_until",
-        Type = "DATETIME2(7)",
-        IsGeneratedAlways = true,
-        GeneratedAlwaysType = "RowEnd"
-      });
-    });
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    success.Should().BeTrue();
-    task.ValidationWarnings.Should().ContainMatch("*missing history table*");
-  }
-
-  // --- Audit column validation ---------------------------------------------
-
-  [Fact]
-  public void Validate_MissingAuditColumns_ReportsError()
+  public void MissingAuditColumns_FailsWithError()
   {
     var table = new TableMetadata
     {
@@ -372,181 +304,51 @@ public class SchemaValidatorTests
       Schema = "test",
       PrimaryKey = "id",
       Columns =
-        [
-            new ColumnMetadata { Name = "id", Type = "INT", IsPrimaryKey = true },
-                new ColumnMetadata { Name = "name", Type = "VARCHAR(100)" }
-        ],
+      [
+        new ColumnMetadata { Name = "id", Type = "INT", IsPrimaryKey = true },
+        new ColumnMetadata { Name = "name", Type = "VARCHAR(100)" }
+      ],
       Constraints = new ConstraintsCollection
       {
         PrimaryKey = new PrimaryKeyConstraint { Name = "pk_bare_table", Columns = ["id"] }
       }
     };
 
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
+    (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table));
     success.Should().BeFalse();
-    task.ValidationErrors.Should().ContainMatch("*Missing required 'record_created_by'*");
-    task.ValidationErrors.Should().ContainMatch("*Missing required 'record_updated_by'*");
+    task.ValidationErrors.Should().ContainMatch("*record_created_by*");
+    task.ValidationErrors.Should().ContainMatch("*record_updated_by*");
   }
 
-  [Fact]
-  public void Validate_AppendOnlyWithoutCreatedAt_WarnsButPasses()
-  {
-    TableMetadata table = CreateTable("logs", t =>
-    {
-      t.IsAppendOnly = true;
-      // Remove updated_by -- append-only shouldn't have it
-      t.Columns.RemoveAll(c => c.Name == "record_updated_by");
-    });
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    success.Should().BeTrue();
-    task.ValidationWarnings.Should().ContainMatch("*missing 'record_created_at'*");
-  }
+  // --- TreatWarningsAsErrors through Execute() -----------------------------
 
   [Fact]
-  public void Validate_AppendOnlyWithUpdatedBy_WarnsButPasses()
+  public void TreatWarningsAsErrors_FailsOnWarning()
   {
-    TableMetadata table = CreateTable("logs", t =>
-    {
-      t.IsAppendOnly = true;
-      t.Columns.Add(new ColumnMetadata { Name = "record_created_at", Type = "DATETIMEOFFSET(7)" });
-    });
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    success.Should().BeTrue();
-    task.ValidationWarnings.Should().ContainMatch("*should not have 'record_updated_by'*");
-  }
-
-  // --- Naming convention validation ----------------------------------------
-
-  [Fact]
-  public void Validate_SnakeCaseNames_Passes()
-  {
-    TableMetadata table = CreateTable("user_accounts");
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    success.Should().BeTrue();
-    task.ValidationWarnings.Should().BeEmpty();
-  }
-
-  [Fact]
-  public void Validate_PascalCaseTableName_Warns()
-  {
-    TableMetadata table = CreateTable("UserAccounts");
-
-    (bool _, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    // Naming is a warning, not an error -- validation still passes
-    task.ValidationWarnings.Should().ContainMatch("*snake_case*");
-  }
-
-  [Fact]
-  public void Validate_WrongPkNamingConvention_Warns()
-  {
-    TableMetadata table = CreateTable("users", t =>
-    {
-      t.Constraints.PrimaryKey = new PrimaryKeyConstraint
-      {
-        Name = "PK_Users",
-        Columns = ["id"]
-      };
-    });
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    task.ValidationWarnings.Should().ContainMatch("*PK should be named 'pk_users'*");
-  }
-
-  [Fact]
-  public void Validate_WrongFkNamingConvention_Warns()
-  {
-    TableMetadata parent = CreateTable("parent");
-    TableMetadata child = CreateTable("child", t =>
-    {
-      t.Constraints.ForeignKeys.Add(new ForeignKeyConstraint
-      {
-        Name = "FK_Child_Parent",
-        Columns = ["parent_id"],
-        ReferencedTable = "parent",
-        ReferencedColumns = ["id"]
-      });
-      t.Columns.Add(new ColumnMetadata { Name = "parent_id", Type = "UNIQUEIDENTIFIER" });
-    });
-
-    (bool _, SchemaValidator? task) = RunValidator(CreateMetadata(parent, child));
-    task.ValidationWarnings.Should().ContainMatch("*should start with 'fk_child_'*");
-  }
-
-  // --- Primary key validation ----------------------------------------------
-
-  [Fact]
-  public void Validate_MissingPrimaryKey_ReportsError()
-  {
-    var table = new TableMetadata
-    {
-      Name = "no_pk",
-      Schema = "test",
-      Columns =
-        [
-            new ColumnMetadata { Name = "data", Type = "VARCHAR(100)" },
-                new ColumnMetadata { Name = "record_created_by", Type = "UNIQUEIDENTIFIER" },
-                new ColumnMetadata { Name = "record_updated_by", Type = "UNIQUEIDENTIFIER" }
-        ],
-      Constraints = new ConstraintsCollection()
-    };
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    success.Should().BeFalse();
-    task.ValidationErrors.Should().ContainMatch("*no primary key*");
-  }
-
-  // --- Soft delete consistency ---------------------------------------------
-
-  [Fact]
-  public void Validate_SoftDeleteWithoutTemporal_ReportsError()
-  {
-    TableMetadata table = CreateTable("bad_soft", t =>
-    {
-      t.HasSoftDelete = true;
-      t.HasActiveColumn = true;
-      t.HasTemporalVersioning = false;
-      t.ActiveColumnName = "record_active";
-    });
-
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table));
-    success.Should().BeFalse();
-    task.ValidationErrors.Should().ContainMatch("*HasTemporalVersioning is false*");
-  }
-
-  // --- TreatWarningsAsErrors -----------------------------------------------
-
-  [Fact]
-  public void Validate_TreatWarningsAsErrors_FailsOnWarning()
-  {
-    SchemaToolsConfig config = CreateConfig(v => v.TreatWarningsAsErrors = true);
-
-    // PascalCase table will generate a naming warning
+    SchemaToolsConfig config = CreateConfig(c => c.Validation.TreatWarningsAsErrors = true);
     TableMetadata table = CreateTable("BadName");
 
-    (bool success, SchemaValidator _) = RunValidator(CreateMetadata(table), config);
-    success.Should().BeFalse("warnings should be treated as errors");
+    (bool success, _) = RunValidator(CreateMetadata(table), config);
+    success.Should().BeFalse("warnings treated as errors should fail");
   }
 
-  // --- Disabling individual validations ------------------------------------
+  // --- Disabling individual validations through Execute() ------------------
 
   [Fact]
-  public void Validate_DisabledNamingConventions_IgnoresStyleIssues()
+  public void DisabledNamingConventions_NoPascalCaseWarning()
   {
-    SchemaToolsConfig config = CreateConfig(v => v.EnforceNamingConventions = false);
+    SchemaToolsConfig config = CreateConfig(c => c.Validation.EnforceNamingConventions = false);
     TableMetadata table = CreateTable("PascalCase");
 
-    (bool success, SchemaValidator? task) = RunValidator(CreateMetadata(table), config);
+    (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table), config);
     success.Should().BeTrue();
     task.ValidationWarnings.Should().NotContainMatch("*snake_case*");
   }
 
   [Fact]
-  public void Validate_DisabledAuditColumns_IgnoresMissingColumns()
+  public void DisabledAuditColumns_IgnoresMissing()
   {
-    SchemaToolsConfig config = CreateConfig(v => v.ValidateAuditColumns = false);
-
+    SchemaToolsConfig config = CreateConfig(c => c.Validation.ValidateAuditColumns = false);
     var table = new TableMetadata
     {
       Name = "minimal",
@@ -559,14 +361,17 @@ public class SchemaValidatorTests
       }
     };
 
-    (bool success, SchemaValidator _) = RunValidator(CreateMetadata(table), config);
+    (bool success, _) = RunValidator(CreateMetadata(table), config);
     success.Should().BeTrue();
   }
 
-  // --- Configurable column names -------------------------------------------
+  // --- Configurable column names through Execute() -------------------------
 
-  [Fact]
-  public void Validate_CustomTemporalColumns_ValidatesCorrectNames()
+  [Theory]
+  [InlineData("period_start", "period_end", true, "custom temporal columns accepted")]
+  [InlineData("record_valid_from", "record_valid_until", false, "default temporal columns rejected when custom expected")]
+  public void CustomTemporalColumns_ValidatesAgainstConfig(
+    string validFrom, string validTo, bool expectSuccess, string because)
   {
     SchemaToolsConfig config = new SchemaToolsConfig
     {
@@ -575,45 +380,24 @@ public class SchemaValidatorTests
       Columns = new ColumnNamingConfig { ValidFrom = "period_start", ValidTo = "period_end" }
     };
 
-    TableMetadata table = CreateTable("temporal", t =>
+    TableMetadata table = CreateTable("temporal", t => t with
     {
-      t.HasTemporalVersioning = true;
-      t.HistoryTable = "[test].[temporal_history]";
-      t.Columns.Add(new ColumnMetadata { Name = "period_start", Type = "DATETIME2", IsGeneratedAlways = true });
-      t.Columns.Add(new ColumnMetadata { Name = "period_end", Type = "DATETIME2", IsGeneratedAlways = true });
+      HasTemporalVersioning = true,
+      HistoryTable = "[test].[temporal_history]",
+      Columns =
+      [
+        .. t.Columns,
+        new ColumnMetadata { Name = validFrom, Type = "DATETIME2", IsGeneratedAlways = true },
+        new ColumnMetadata { Name = validTo, Type = "DATETIME2", IsGeneratedAlways = true }
+      ]
     });
 
-    (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table), config);
-    success.Should().BeTrue();
-    task.ValidationErrors.Should().NotContainMatch("*missing*period_start*");
+    (bool success, _) = RunValidator(CreateMetadata(table), config);
+    success.Should().Be(expectSuccess, because);
   }
 
   [Fact]
-  public void Validate_CustomTemporalColumns_ReportsErrorForMissingColumns()
-  {
-    SchemaToolsConfig config = new SchemaToolsConfig
-    {
-      Database = "TestDB",
-      DefaultSchema = "test",
-      Columns = new ColumnNamingConfig { ValidFrom = "period_start", ValidTo = "period_end" }
-    };
-
-    TableMetadata table = CreateTable("temporal", t =>
-    {
-      t.HasTemporalVersioning = true;
-      // Table has default temporal columns but config expects period_start / period_end
-      t.Columns.Add(new ColumnMetadata { Name = "record_valid_from", Type = "DATETIME2", IsGeneratedAlways = true });
-      t.Columns.Add(new ColumnMetadata { Name = "record_valid_until", Type = "DATETIME2", IsGeneratedAlways = true });
-    });
-
-    (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table), config);
-    success.Should().BeFalse();
-    task.ValidationErrors.Should().ContainMatch("*missing*period_start*");
-    task.ValidationErrors.Should().ContainMatch("*missing*period_end*");
-  }
-
-  [Fact]
-  public void Validate_CustomAuditColumns_ValidatesCorrectNames()
+  public void CustomAuditColumns_ValidatesCorrectNames()
   {
     SchemaToolsConfig config = new SchemaToolsConfig
     {
@@ -622,16 +406,16 @@ public class SchemaValidatorTests
       Columns = new ColumnNamingConfig { CreatedBy = "author", UpdatedBy = "editor" }
     };
 
-    TableMetadata table = new TableMetadata
+    var table = new TableMetadata
     {
       Name = "custom_audit",
       Schema = "test",
       PrimaryKey = "id",
       Columns =
       [
-          new ColumnMetadata { Name = "id", Type = "INT", IsPrimaryKey = true },
-          new ColumnMetadata { Name = "author", Type = "UNIQUEIDENTIFIER" },
-          new ColumnMetadata { Name = "editor", Type = "UNIQUEIDENTIFIER" }
+        new ColumnMetadata { Name = "id", Type = "INT", IsPrimaryKey = true },
+        new ColumnMetadata { Name = "author", Type = "UNIQUEIDENTIFIER" },
+        new ColumnMetadata { Name = "editor", Type = "UNIQUEIDENTIFIER" }
       ],
       Constraints = new ConstraintsCollection
       {
@@ -639,12 +423,12 @@ public class SchemaValidatorTests
       }
     };
 
-    (bool success, SchemaValidator _) = RunValidator(CreateMetadata(table), config);
+    (bool success, _) = RunValidator(CreateMetadata(table), config);
     success.Should().BeTrue();
   }
 
   [Fact]
-  public void Validate_CustomActiveColumn_ChecksSoftDeleteCorrectly()
+  public void CustomActiveColumn_SoftDeleteValidatedCorrectly()
   {
     SchemaToolsConfig config = new SchemaToolsConfig
     {
@@ -653,16 +437,20 @@ public class SchemaValidatorTests
       Columns = new ColumnNamingConfig { Active = "is_enabled" }
     };
 
-    TableMetadata table = CreateTable("soft_del", t =>
+    TableMetadata table = CreateTable("soft_del", t => t with
     {
-      t.HasSoftDelete = true;
-      t.HasActiveColumn = true;
-      t.HasTemporalVersioning = true;
-      t.HistoryTable = "[test].[soft_del_history]";
-      t.ActiveColumnName = "is_enabled";
-      t.Columns.Add(new ColumnMetadata { Name = "is_enabled", Type = "BIT", DefaultValue = "1" });
-      t.Columns.Add(new ColumnMetadata { Name = "record_valid_from", Type = "DATETIME2", IsGeneratedAlways = true });
-      t.Columns.Add(new ColumnMetadata { Name = "record_valid_until", Type = "DATETIME2", IsGeneratedAlways = true });
+      HasSoftDelete = true,
+      HasActiveColumn = true,
+      HasTemporalVersioning = true,
+      HistoryTable = "[test].[soft_del_history]",
+      ActiveColumnName = "is_enabled",
+      Columns =
+      [
+        .. t.Columns,
+        new ColumnMetadata { Name = "is_enabled", Type = "BIT", DefaultValue = "1" },
+        new ColumnMetadata { Name = "record_valid_from", Type = "DATETIME2", IsGeneratedAlways = true },
+        new ColumnMetadata { Name = "record_valid_until", Type = "DATETIME2", IsGeneratedAlways = true }
+      ]
     });
 
     (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table), config);
@@ -670,10 +458,10 @@ public class SchemaValidatorTests
     task.ValidationWarnings.Should().NotContainMatch("*Should have DEFAULT 1*");
   }
 
-  // --- Per-table overrides in validator ------------------------------------
+  // --- Per-table overrides through Execute() -------------------------------
 
   [Fact]
-  public void Validate_PerTableOverride_SkipsTemporalValidation()
+  public void PerTableOverride_SkipsTemporalValidation()
   {
     SchemaToolsConfig config = new SchemaToolsConfig
     {
@@ -688,10 +476,9 @@ public class SchemaValidatorTests
       }
     };
 
-    TableMetadata table = CreateTable("special_table", t =>
+    TableMetadata table = CreateTable("special_table", t => t with
     {
-      t.HasTemporalVersioning = true;
-      // Deliberately missing temporal columns -- should not produce errors
+      HasTemporalVersioning = true
     });
 
     (bool success, SchemaValidator task) = RunValidator(CreateMetadata(table), config);
@@ -700,7 +487,7 @@ public class SchemaValidatorTests
   }
 
   [Fact]
-  public void Validate_PerTableOverride_SkipsAuditValidationForCategory()
+  public void PerTableOverride_SkipsAuditForCategory()
   {
     SchemaToolsConfig config = new SchemaToolsConfig
     {
@@ -715,7 +502,7 @@ public class SchemaValidatorTests
       }
     };
 
-    TableMetadata table = new TableMetadata
+    var table = new TableMetadata
     {
       Name = "system_config",
       Schema = "test",

@@ -2,96 +2,109 @@
 
 namespace SchemaTools.Models;
 
-public class ColumnMetadata
+/// <summary>
+/// SQL Server GENERATED ALWAYS column type for temporal tables.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum GeneratedAlwaysType
+{
+  /// <summary>Period start column (GENERATED ALWAYS AS ROW START).</summary>
+  RowStart,
+
+  /// <summary>Period end column (GENERATED ALWAYS AS ROW END).</summary>
+  RowEnd
+}
+
+public sealed record ColumnMetadata
 {
   [JsonPropertyName("name")]
-  public string Name { get; set; } = string.Empty;
+  public required string Name { get; init; }
 
   [JsonPropertyName("type")]
-  public string Type { get; set; } = string.Empty;
+  public required string Type { get; init; }
 
   /// <summary>
   /// Character or binary length (e.g., 100 for varchar(100)). Null for non-sized types or MAX columns.
   /// </summary>
   [JsonPropertyName("maxLength")]
-  public int? MaxLength { get; set; }
+  public int? MaxLength { get; init; }
 
   /// <summary>
   /// Numeric or temporal precision (e.g., 10 for decimal(10,2), 7 for datetime2(7)).
   /// Null for types without precision.
   /// </summary>
   [JsonPropertyName("precision")]
-  public int? Precision { get; set; }
+  public int? Precision { get; init; }
 
   /// <summary>
   /// Numeric scale (e.g., 2 for decimal(10,2)). Null for types without scale.
   /// </summary>
   [JsonPropertyName("scale")]
-  public int? Scale { get; set; }
+  public int? Scale { get; init; }
 
   /// <summary>
   /// True for MAX-length columns (varchar(max), nvarchar(max), varbinary(max)).
   /// </summary>
   [JsonPropertyName("isMaxLength")]
-  public bool IsMaxLength { get; set; }
+  public bool IsMaxLength { get; init; }
 
   [JsonPropertyName("nullable")]
-  public bool Nullable { get; set; }
+  public bool Nullable { get; init; }
 
   [JsonPropertyName("isPrimaryKey")]
-  public bool IsPrimaryKey { get; set; }
+  public bool IsPrimaryKey { get; init; }
 
   [JsonPropertyName("isIdentity")]
-  public bool IsIdentity { get; set; }
+  public bool IsIdentity { get; init; }
 
   [JsonPropertyName("isComputed")]
-  public bool IsComputed { get; set; }
+  public bool IsComputed { get; init; }
 
   [JsonPropertyName("computedExpression")]
-  public string? ComputedExpression { get; set; }
+  public string? ComputedExpression { get; init; }
 
   [JsonPropertyName("isPersisted")]
-  public bool IsPersisted { get; set; }
+  public bool IsPersisted { get; init; }
 
   [JsonPropertyName("defaultValue")]
-  public string? DefaultValue { get; set; }
+  public string? DefaultValue { get; init; }
 
   [JsonPropertyName("defaultConstraintName")]
-  public string? DefaultConstraintName { get; set; }
+  public string? DefaultConstraintName { get; init; }
 
   [JsonPropertyName("foreignKey")]
-  public ForeignKeyReference? ForeignKey { get; set; }
+  public ForeignKeyReference? ForeignKey { get; init; }
 
   [JsonPropertyName("isPolymorphicForeignKey")]
-  public bool IsPolymorphicForeignKey { get; set; }
+  public bool IsPolymorphicForeignKey { get; init; }
 
   [JsonPropertyName("isCompositeFK")]
-  public bool IsCompositeFK { get; set; }
+  public bool IsCompositeFK { get; init; }
 
   [JsonPropertyName("isUnique")]
-  public bool IsUnique { get; set; }
+  public bool IsUnique { get; init; }
 
   [JsonPropertyName("checkConstraint")]
-  public string? CheckConstraint { get; set; }
+  public string? CheckConstraint { get; init; }
 
   [JsonPropertyName("description")]
-  public string? Description { get; set; }
+  public string? Description { get; init; }
 
   [JsonPropertyName("isGeneratedAlways")]
-  public bool IsGeneratedAlways { get; set; }
+  public bool IsGeneratedAlways { get; init; }
 
   [JsonPropertyName("generatedAlwaysType")]
-  public string? GeneratedAlwaysType { get; set; }
+  public GeneratedAlwaysType? GeneratedAlwaysType { get; init; }
 }
 
-public class ForeignKeyReference
+public sealed record ForeignKeyReference
 {
   [JsonPropertyName("table")]
-  public string Table { get; set; } = string.Empty;
+  public required string Table { get; init; }
 
   [JsonPropertyName("column")]
-  public string Column { get; set; } = string.Empty;
+  public required string Column { get; init; }
 
   [JsonPropertyName("schema")]
-  public string? Schema { get; set; }
+  public string? Schema { get; init; }
 }

@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Microsoft.Build.Framework;
+using SchemaTools.Diagnostics;
 using SchemaTools.Models;
 using SchemaTools.Utilities;
 using MSTask = Microsoft.Build.Utilities.Task;
@@ -8,20 +9,20 @@ namespace SchemaTools.Tasks;
 
 /// <summary>
 /// Generates soft-delete triggers based on table configuration.
-/// 
+///
 /// Trigger Types by Mode:
 /// - Cascade: Parent triggers that propagate active=0 to children
 /// - Restrict: Parent triggers that block soft-delete if active children exist
 /// - Ignore: No triggers generated for this table
-/// 
+///
 /// Additionally generates:
 /// - Reactivation Guard triggers for child tables (prevent reactivating while parent inactive)
-/// 
+///
 /// Design Principles:
 /// - Parent tables (with FK children): Generate trigger that propagates active=0 to children
 /// - Leaf tables (no children): No trigger needed (nothing to cascade)
 /// - NO hard-delete triggers - hard delete is deferred and handled by SqlProcedureGenerator
-/// 
+///
 /// This ensures:
 /// - Semantic correctness (deleting parent cascades to children)
 /// - FK integrity (children soft-deleted before parent could be hard-deleted)
@@ -49,7 +50,7 @@ public class SqlTriggerGenerator : MSTask
   /// <summary>
   /// Schema name for generated triggers (default: from analysis)
   /// </summary>
-  public string DefaultSchema { get; set; } = "dbo";
+  public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
 
   internal SourceAnalysisResult? TestAnalysis { get; set; }
 
@@ -62,7 +63,13 @@ public class SqlTriggerGenerator : MSTask
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, string.Empty);
 
-      SourceAnalysisResult analysis = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
+      OperationResult<SourceAnalysisResult> analysisResult = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
+      if (!analysisResult.IsSuccess)
+      {
+        DiagnosticReporter.Report(Log, analysisResult.Diagnostics);
+        return false;
+      }
+      SourceAnalysisResult analysis = analysisResult.Value;
 
       var tableLookup = analysis.Tables.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
 
@@ -119,6 +126,19 @@ public class SqlTriggerGenerator : MSTask
           {
             Log.LogMessage(MessageImportance.Low, $"  Skipped {parent.Name}: Already exists");
             skippedExists++;
+            continue;
+          }
+
+          if (parent.PrimaryKeyColumns.Count == 0)
+          {
+            DiagnosticReporter.Report(Log, new SchemaToolsError[]
+            {
+              new GenerationError
+              {
+                Code = "ST3010",
+                Message = $"Cannot generate trigger for '{parent.Name}': no primary key columns detected"
+              }
+            });
             continue;
           }
 
@@ -183,6 +203,19 @@ public class SqlTriggerGenerator : MSTask
               continue;
             }
 
+            if (child.PrimaryKeyColumns.Count == 0)
+            {
+              DiagnosticReporter.Report(Log, new SchemaToolsError[]
+              {
+                new GenerationError
+                {
+                  Code = "ST3010",
+                  Message = $"Cannot generate reactivation guard trigger for '{child.Name}': no primary key columns detected"
+                }
+              });
+              continue;
+            }
+
             string triggerSql = GenerateReactivationGuardTrigger(child, tableLookup, analysis.Columns);
             File.WriteAllText(filePath, triggerSql, Encoding.UTF8);
 
@@ -229,6 +262,19 @@ public class SqlTriggerGenerator : MSTask
             continue;
           }
 
+          if (parent.PrimaryKeyColumns.Count == 0)
+          {
+            DiagnosticReporter.Report(Log, new SchemaToolsError[]
+            {
+              new GenerationError
+              {
+                Code = "ST3010",
+                Message = $"Cannot generate reactivation cascade trigger for '{parent.Name}': no primary key columns detected"
+              }
+            });
+            continue;
+          }
+
           string triggerSql = GenerateReactivationCascadeTrigger(parent, tableLookup, analysis.Columns);
           File.WriteAllText(filePath, triggerSql, Encoding.UTF8);
 
@@ -254,7 +300,7 @@ public class SqlTriggerGenerator : MSTask
       Log.LogMessage(MessageImportance.High, $"Output dir:                 {OutputDirectory}");
       Log.LogMessage(MessageImportance.High, "============================================================");
 
-      return true;
+      return !Log.HasLoggedErrors;
     }
     catch (Exception ex)
     {
@@ -270,11 +316,9 @@ public class SqlTriggerGenerator : MSTask
   /// Builds a JOIN condition for PK columns (same column names on both sides).
   /// Example: "i.col1 = d.col1 AND i.col2 = d.col2"
   /// </summary>
-  private static string BuildPkJoinCondition(List<string> pkColumns, string leftAlias, string rightAlias)
+  /// <remarks>Callers must validate that <paramref name="pkColumns"/> is non-empty before calling.</remarks>
+  private static string BuildPkJoinCondition(IReadOnlyList<string> pkColumns, string leftAlias, string rightAlias)
   {
-    if (pkColumns.Count == 0)
-      throw new InvalidOperationException("Cannot build PK join condition: no primary key columns detected");
-
     if (pkColumns.Count == 1)
       return $"{leftAlias}.{pkColumns[0]} = {rightAlias}.{pkColumns[0]}";
 
@@ -285,15 +329,13 @@ public class SqlTriggerGenerator : MSTask
   /// Builds a JOIN condition for FK relationships (different column names).
   /// Example: "child.parent_id = parent.id AND child.tenant_id = parent.tenant_id"
   /// </summary>
+  /// <remarks>Callers must validate that both column lists are non-empty before calling.</remarks>
   private static string BuildFkJoinCondition(
-    List<string> fkColumns,
-    List<string> referencedColumns,
+    IReadOnlyList<string> fkColumns,
+    IReadOnlyList<string> referencedColumns,
     string childAlias,
     string parentAlias)
   {
-    if (fkColumns.Count == 0 || referencedColumns.Count == 0)
-      throw new InvalidOperationException("Cannot build FK join condition: no foreign key columns detected");
-
     if (fkColumns.Count == 1)
       return $"{childAlias}.{fkColumns[0]} = {parentAlias}.{referencedColumns[0]}";
 
@@ -310,12 +352,7 @@ public class SqlTriggerGenerator : MSTask
   {
     string schema = parent.Schema ?? DefaultSchema;
     string activeColumn = parent.ActiveColumnName ?? "active";
-    List<string> primaryKeyColumns = parent.PrimaryKeyColumns;
-    if (primaryKeyColumns.Count == 0)
-    {
-      throw new InvalidOperationException(
-        $"Cannot generate cascade trigger for '{parent.Name}': no primary key columns detected");
-    }
+    IReadOnlyList<string> primaryKeyColumns = parent.PrimaryKeyColumns;
 
     var sb = new StringBuilder();
 
@@ -395,8 +432,8 @@ public class SqlTriggerGenerator : MSTask
       string childActiveColumn = child.ActiveColumnName ?? "active";
 
       // Get FK columns (supports composite FKs)
-      List<string> fkColumns = fkToParent.Columns;
-      List<string> referencedColumns = fkToParent.ReferencedColumns.Count > 0
+      IReadOnlyList<string> fkColumns = fkToParent.Columns;
+      IReadOnlyList<string> referencedColumns = fkToParent.ReferencedColumns.Count > 0
         ? fkToParent.ReferencedColumns
         : primaryKeyColumns;
 
@@ -460,12 +497,7 @@ public class SqlTriggerGenerator : MSTask
   {
     string schema = child.Schema ?? DefaultSchema;
     string activeColumn = child.ActiveColumnName ?? "active";
-    List<string> primaryKeyColumns = child.PrimaryKeyColumns;
-    if (primaryKeyColumns.Count == 0)
-    {
-      throw new InvalidOperationException(
-        $"Cannot generate reactivation guard trigger for '{child.Name}': no primary key columns detected");
-    }
+    IReadOnlyList<string> primaryKeyColumns = child.PrimaryKeyColumns;
 
     var softDeleteParents = child.ForeignKeyReferences
       .Where(fk => tableLookup.TryGetValue(fk.ReferencedTable, out TableAnalysis? p) && p.HasSoftDelete)
@@ -523,8 +555,8 @@ public class SqlTriggerGenerator : MSTask
       string parentSchema = parent.Schema ?? DefaultSchema;
       string parentActiveColumn = parent.ActiveColumnName ?? "active";
 
-      List<string> fkColumns = fk.Columns;
-      List<string> refColumns = fk.ReferencedColumns.Count > 0
+      IReadOnlyList<string> fkColumns = fk.Columns;
+      IReadOnlyList<string> refColumns = fk.ReferencedColumns.Count > 0
         ? fk.ReferencedColumns
         : parent.PrimaryKeyColumns;
 
@@ -568,12 +600,7 @@ public class SqlTriggerGenerator : MSTask
   {
     string schema = parent.Schema ?? DefaultSchema;
     string activeColumn = parent.ActiveColumnName ?? "active";
-    List<string> primaryKeyColumns = parent.PrimaryKeyColumns;
-    if (primaryKeyColumns.Count == 0)
-    {
-      throw new InvalidOperationException(
-        $"Cannot generate restrict trigger for '{parent.Name}': no primary key columns detected");
-    }
+    IReadOnlyList<string> primaryKeyColumns = parent.PrimaryKeyColumns;
 
     var sb = new StringBuilder();
 
@@ -649,8 +676,8 @@ public class SqlTriggerGenerator : MSTask
       string childActiveColumn = child.ActiveColumnName ?? "active";
 
       // Get FK columns (supports composite FKs)
-      List<string> fkColumns = fkToParent.Columns;
-      List<string> referencedColumns = fkToParent.ReferencedColumns.Count > 0
+      IReadOnlyList<string> fkColumns = fkToParent.Columns;
+      IReadOnlyList<string> referencedColumns = fkToParent.ReferencedColumns.Count > 0
         ? fkToParent.ReferencedColumns
         : primaryKeyColumns;
 
@@ -697,12 +724,7 @@ public class SqlTriggerGenerator : MSTask
     string activeColumn = parent.ActiveColumnName ?? "active";
     string validToColumn = parent.ValidToColumn ?? columns.ValidTo;
     int toleranceMs = parent.ReactivationCascadeToleranceMs;
-    List<string> primaryKeyColumns = parent.PrimaryKeyColumns;
-    if (primaryKeyColumns.Count == 0)
-    {
-      throw new InvalidOperationException(
-        $"Cannot generate reactivation cascade trigger for '{parent.Name}': no primary key columns detected");
-    }
+    IReadOnlyList<string> primaryKeyColumns = parent.PrimaryKeyColumns;
 
     var sb = new StringBuilder();
 
@@ -784,8 +806,8 @@ public class SqlTriggerGenerator : MSTask
       string childValidToColumn = child.ValidToColumn ?? columns.ValidTo;
 
       // Get FK columns (supports composite FKs)
-      List<string> fkColumns = fkToParent.Columns;
-      List<string> referencedColumns = fkToParent.ReferencedColumns.Count > 0
+      IReadOnlyList<string> fkColumns = fkToParent.Columns;
+      IReadOnlyList<string> referencedColumns = fkToParent.ReferencedColumns.Count > 0
         ? fkToParent.ReferencedColumns
         : primaryKeyColumns;
 

@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Microsoft.Build.Framework;
+using SchemaTools.Diagnostics;
 using SchemaTools.Models;
 using SchemaTools.Utilities;
 using MSTask = Microsoft.Build.Utilities.Task;
@@ -8,7 +9,7 @@ namespace SchemaTools.Tasks;
 
 /// <summary>
 /// Generates stored procedures for deferred hard-delete of soft-deleted records.
-/// 
+///
 /// Design Principles:
 /// - Hard delete is ALWAYS deferred (no immediate deletion)
 /// - Deletes in FK-safe topological order (leaves first, then parents)
@@ -61,7 +62,13 @@ public class SqlProcedureGenerator : MSTask
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, string.Empty);
 
-      SourceAnalysisResult analysis = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
+      OperationResult<SourceAnalysisResult> analysisResult = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
+      if (!analysisResult.IsSuccess)
+      {
+        DiagnosticReporter.Report(Log, analysisResult.Diagnostics);
+        return false;
+      }
+      SourceAnalysisResult analysis = analysisResult.Value;
 
       var softDeleteTables = analysis.Tables
         .Where(t => t.HasSoftDelete)
@@ -249,7 +256,7 @@ BEGIN
       string activeColumn = table.ActiveColumnName ?? "active";
       string validToColumn = table.ValidToColumn ?? "valid_to";
 
-      List<string> pkColumns = table.PrimaryKeyColumns;
+      IReadOnlyList<string> pkColumns = table.PrimaryKeyColumns;
       if (pkColumns.Count == 0)
       {
         Log.LogWarning($"Table '{table.Name}' has no primary key columns detected - skipping purge generation for this table");
@@ -330,7 +337,7 @@ BEGIN
             COMMIT TRANSACTION;
 
         -- Report results
-        SELECT 
+        SELECT
             table_name AS [Table],
             records_deleted AS [Records Deleted],
             execution_order AS [Order]
@@ -338,7 +345,7 @@ BEGIN
         WHERE records_deleted > 0
         ORDER BY execution_order;
 
-        SELECT 
+        SELECT
             @total_deleted AS [Total Records Deleted],
             DATEDIFF(MILLISECOND, @start_time, SYSUTCDATETIME()) AS [Duration (ms)],
             @grace_period_days AS [Grace Period (days)],

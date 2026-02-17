@@ -1,6 +1,8 @@
 ﻿using System.Text;
-using System.Text.Json;
+using SchemaTools.Configuration;
+using SchemaTools.Diagnostics;
 using SchemaTools.Models;
+using SchemaTools.Utilities;
 using MSTask = Microsoft.Build.Utilities.Task;
 
 namespace SchemaTools.Tasks;
@@ -74,12 +76,7 @@ public class MarkdownDocumentationGenerator : MSTask
 
       GenerateTableDocumentation(markdown, metadata);
 
-      string? outputDir = Path.GetDirectoryName(OutputFile);
-      if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
-      {
-        Directory.CreateDirectory(outputDir);
-      }
-
+      GenerationUtilities.EnsureDirectoryExists(OutputFile);
       File.WriteAllText(OutputFile, markdown.ToString(), Encoding.UTF8);
 
       Log.LogMessage(Microsoft.Build.Framework.MessageImportance.High, $"+ Documentation written to: {OutputFile}");
@@ -95,54 +92,20 @@ public class MarkdownDocumentationGenerator : MSTask
 
   private void LoadConfiguration()
   {
-    // Priority: TestConfig > ConfigFile > defaults
-    if (TestConfig != null)
-    {
-      _config = TestConfig;
-      Log.LogMessage("Using injected test configuration");
-      return;
-    }
-
-    if (!string.IsNullOrEmpty(ConfigFile) && File.Exists(ConfigFile))
-    {
-      string json = File.ReadAllText(ConfigFile);
-      SchemaToolsConfig? deserializedConfig = JsonSerializer.Deserialize<SchemaToolsConfig>(json, new JsonSerializerOptions
-      {
-        PropertyNameCaseInsensitive = true
-      });
-
-      _config = deserializedConfig ?? new SchemaToolsConfig();
-    }
+    _config = ConfigurationLoader.Load(ConfigFile, TestConfig);
   }
 
   private SchemaMetadata? LoadMetadata()
   {
-    // Priority: TestMetadata > MetadataFile
-    if (TestMetadata != null)
-    {
-      Log.LogMessage("Using injected test metadata");
-      return TestMetadata;
-    }
+    OperationResult<SchemaMetadata> metadataResult = MetadataLoader.Load(MetadataFile, TestMetadata);
 
-    if (!File.Exists(MetadataFile))
+    if (!metadataResult.IsSuccess)
     {
-      Log.LogError($"Metadata file not found: {MetadataFile}");
+      DiagnosticReporter.Report(Log, metadataResult.Diagnostics);
       return null;
     }
 
-    string json = File.ReadAllText(MetadataFile);
-    SchemaMetadata? metadata = JsonSerializer.Deserialize<SchemaMetadata>(json, new JsonSerializerOptions
-    {
-      PropertyNameCaseInsensitive = true
-    });
-
-    if (metadata == null)
-    {
-      Log.LogError("Failed to deserialize metadata");
-      return null;
-    }
-
-    return metadata;
+    return metadataResult.Value;
   }
 
   private static bool GetDocSetting(bool? taskParameter, bool configValue)
@@ -157,7 +120,7 @@ public class MarkdownDocumentationGenerator : MSTask
     markdown.AppendLine("- [Statistics](#statistics)");
     markdown.AppendLine("- [Entity Relationship Diagrams](#entity-relationship-diagrams)");
 
-    foreach (IGrouping<string, TableMetadata>? category in metadata.Tables.GroupBy(t => t.Category ?? "Uncategorized").OrderBy(g => g.Key))
+    foreach (IGrouping<string, TableMetadata>? category in metadata.Tables.GroupBy(t => t.Category ?? "Uncategorised").OrderBy(g => g.Key))
     {
       string categorySlug = category.Key.ToLowerInvariant().Replace(" ", "-").Replace("_", "-");
       markdown.AppendLine($"- [{category.Key}](#{categorySlug})");
@@ -193,7 +156,7 @@ public class MarkdownDocumentationGenerator : MSTask
     markdown.AppendLine("## Entity Relationship Diagrams");
     markdown.AppendLine();
 
-    foreach (IGrouping<string, TableMetadata>? category in metadata.Tables.GroupBy(t => t.Category ?? "Uncategorized").OrderBy(g => g.Key))
+    foreach (IGrouping<string, TableMetadata>? category in metadata.Tables.GroupBy(t => t.Category ?? "Uncategorised").OrderBy(g => g.Key))
     {
       markdown.AppendLine($"### {category.Key} - ER Diagram");
       markdown.AppendLine();
@@ -245,7 +208,7 @@ public class MarkdownDocumentationGenerator : MSTask
 
   private void GenerateTableDocumentation(StringBuilder markdown, SchemaMetadata metadata)
   {
-    foreach (IGrouping<string, TableMetadata>? category in metadata.Tables.GroupBy(t => t.Category ?? "Uncategorized").OrderBy(g => g.Key))
+    foreach (IGrouping<string, TableMetadata>? category in metadata.Tables.GroupBy(t => t.Category ?? "Uncategorised").OrderBy(g => g.Key))
     {
       string categorySlug = category.Key.ToLowerInvariant().Replace(" ", "-").Replace("_", "-");
       markdown.AppendLine($"<a id=\"{categorySlug}\"></a>");
@@ -421,38 +384,34 @@ public class MarkdownDocumentationGenerator : MSTask
   /// Formats FK referential actions for documentation output.
   /// Only includes non-default actions (NO ACTION is the SQL Server default).
   /// </summary>
-  private static string FormatFkActions(string? onDelete, string? onUpdate)
+  private static string FormatFkActions(ForeignKeyAction onDelete, ForeignKeyAction onUpdate)
   {
     var actions = new List<string>();
 
-    if (!string.IsNullOrEmpty(onDelete) &&
-        !string.Equals(onDelete, "NoAction", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(onDelete, "NotSpecified", StringComparison.OrdinalIgnoreCase))
+    if (onDelete != ForeignKeyAction.NoAction)
     {
-      actions.Add($"ON DELETE {FormatAction(onDelete!)}");
+      actions.Add($"ON DELETE {FormatAction(onDelete)}");
     }
 
-    if (!string.IsNullOrEmpty(onUpdate) &&
-        !string.Equals(onUpdate, "NoAction", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(onUpdate, "NotSpecified", StringComparison.OrdinalIgnoreCase))
+    if (onUpdate != ForeignKeyAction.NoAction)
     {
-      actions.Add($"ON UPDATE {FormatAction(onUpdate!)}");
+      actions.Add($"ON UPDATE {FormatAction(onUpdate)}");
     }
 
     return actions.Count > 0 ? $" [{string.Join(", ", actions)}]" : "";
   }
 
   /// <summary>
-  /// Converts DacFx ForeignKeyAction enum names to SQL syntax.
+  /// Converts a <see cref="ForeignKeyAction"/> to SQL syntax.
   /// </summary>
-  private static string FormatAction(string action)
+  private static string FormatAction(ForeignKeyAction action)
   {
     return action switch
     {
-      "Cascade" => "CASCADE",
-      "SetNull" => "SET NULL",
-      "SetDefault" => "SET DEFAULT",
-      _ => action.ToUpperInvariant()
+      ForeignKeyAction.Cascade => "CASCADE",
+      ForeignKeyAction.SetNull => "SET NULL",
+      ForeignKeyAction.SetDefault => "SET DEFAULT",
+      _ => "NO ACTION"
     };
   }
 }
