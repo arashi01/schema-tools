@@ -102,7 +102,7 @@
                       PrivateAssets="all" ExcludeAssets="Runtime" />
 
     <!-- SQL Server ScriptDom for parsing T-SQL (bundled in package) -->
-    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0"
+    <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.168.0"
                       PrivateAssets="all" />
 
     <!-- Compiler attribute polyfills for netstandard2.0 (IsExternalInit, required, etc.)
