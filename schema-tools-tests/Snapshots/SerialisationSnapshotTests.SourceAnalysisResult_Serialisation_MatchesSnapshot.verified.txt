@@ -1,0 +1,108 @@
+﻿{
+  version: 1.0.0-snapshot,
+  analysedAt: DateTimeOffset_1,
+  sqlServerVersion: Sql170,
+  defaultSchema: dbo,
+  tables: [
+    {
+      name: users,
+      schema: dbo,
+      category: core,
+      description: Core user accounts with temporal versioning.,
+      sourceFile: Tables/users.sql,
+      hasActiveColumn: true,
+      hasTemporalVersioning: true,
+      hasSoftDelete: true,
+      activeColumnName: record_active,
+      historyTable: [dbo].[users_history],
+      validFromColumn: valid_from,
+      validToColumn: valid_to,
+      softDeleteMode: Cascade,
+      reactivationCascade: false,
+      reactivationCascadeToleranceMs: 2000,
+      primaryKeyColumns: [
+        id
+      ],
+      foreignKeyReferences: [
+        {
+          referencedTable: tenants,
+          referencedSchema: dbo,
+          columns: [
+            tenant_id
+          ],
+          referencedColumns: [
+            id
+          ],
+          onDelete: NoAction
+        }
+      ],
+      childTables: [
+        orders,
+        user_preferences
+      ],
+      isLeafTable: false
+    },
+    {
+      name: orders,
+      schema: dbo,
+      category: core,
+      description: Customer orders linked to users.,
+      sourceFile: Tables/orders.sql,
+      hasActiveColumn: true,
+      hasTemporalVersioning: false,
+      hasSoftDelete: true,
+      activeColumnName: record_active,
+      softDeleteMode: Restrict,
+      reactivationCascade: false,
+      reactivationCascadeToleranceMs: 2000,
+      primaryKeyColumns: [
+        id
+      ],
+      foreignKeyReferences: [
+        {
+          referencedTable: users,
+          referencedSchema: dbo,
+          columns: [
+            user_id
+          ],
+          referencedColumns: [
+            id
+          ],
+          onDelete: NoAction
+        }
+      ],
+      isLeafTable: true
+    }
+  ],
+  columns: {
+    active: record_active,
+    activeValue: 1,
+    inactiveValue: 0,
+    updatedBy: record_updated_by,
+    updatedByType: UNIQUEIDENTIFIER,
+    validFrom: record_valid_from,
+    validTo: record_valid_until
+  },
+  features: {
+    generateReactivationGuards: true
+  },
+  existingTriggers: [
+    {
+      name: trg_users_soft_delete,
+      schema: dbo,
+      targetTable: users,
+      sourceFile: _generated/Triggers/trg_users_soft_delete.sql,
+      isGenerated: true
+    }
+  ],
+  existingViews: [
+    {
+      name: vw_users,
+      schema: dbo,
+      sourceFile: _generated/Views/vw_users.sql,
+      isGenerated: true
+    }
+  ],
+  generatedTriggersDirectory: _generated/Triggers,
+  generatedViewsDirectory: _generated/Views
+}

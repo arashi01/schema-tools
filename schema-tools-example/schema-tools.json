@@ -28,7 +28,10 @@
     "includeErDiagrams": true,
     "includeStatistics": true,
     "includeConstraints": true,
-    "includeIndexes": true
+    "includeIndexes": true,
+    "historyTables": "None",
+    "infrastructureColumnStyling": true,
+    "erDiagramDomainColumnsOnly": true
   },
 
   "purge": {

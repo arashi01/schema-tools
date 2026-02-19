@@ -2,107 +2,127 @@
 
 namespace SchemaTools.Models;
 
-public class PrimaryKeyConstraint
+/// <summary>
+/// Referential action for foreign key ON DELETE / ON UPDATE clauses.
+/// Values match the DacFx ForeignKeyAction naming convention.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ForeignKeyAction
 {
-  [JsonPropertyName("name")]
-  public string Name { get; set; } = string.Empty;
+  /// <summary>No action (SQL Server default).</summary>
+  NoAction,
 
-  [JsonPropertyName("columns")]
-  public List<string> Columns { get; set; } = new();
+  /// <summary>CASCADE -- propagate to referencing rows.</summary>
+  Cascade,
 
-  [JsonPropertyName("isClustered")]
-  public bool IsClustered { get; set; } = true;
+  /// <summary>SET NULL -- set referencing columns to NULL.</summary>
+  SetNull,
+
+  /// <summary>SET DEFAULT -- set referencing columns to their default value.</summary>
+  SetDefault
 }
 
-public class ForeignKeyConstraint
+public sealed record PrimaryKeyConstraint
 {
   [JsonPropertyName("name")]
-  public string Name { get; set; } = string.Empty;
+  public required string Name { get; init; }
 
   [JsonPropertyName("columns")]
-  public List<string> Columns { get; set; } = new();
+  public IReadOnlyList<string> Columns { get; init; } = [];
+
+  [JsonPropertyName("isClustered")]
+  public bool IsClustered { get; init; } = true;
+}
+
+public sealed record ForeignKeyConstraint
+{
+  [JsonPropertyName("name")]
+  public required string Name { get; init; }
+
+  [JsonPropertyName("columns")]
+  public IReadOnlyList<string> Columns { get; init; } = [];
 
   [JsonPropertyName("referencedTable")]
-  public string ReferencedTable { get; set; } = string.Empty;
+  public required string ReferencedTable { get; init; }
 
   [JsonPropertyName("referencedSchema")]
-  public string? ReferencedSchema { get; set; }
+  public string? ReferencedSchema { get; init; }
 
   [JsonPropertyName("referencedColumns")]
-  public List<string> ReferencedColumns { get; set; } = new();
+  public IReadOnlyList<string> ReferencedColumns { get; init; } = [];
 
   [JsonPropertyName("onDelete")]
-  public string? OnDelete { get; set; }
+  public ForeignKeyAction OnDelete { get; init; } = ForeignKeyAction.NoAction;
 
   [JsonPropertyName("onUpdate")]
-  public string? OnUpdate { get; set; }
+  public ForeignKeyAction OnUpdate { get; init; } = ForeignKeyAction.NoAction;
 
   [JsonPropertyName("isComposite")]
   public bool IsComposite => Columns.Count > 1;
 }
 
-public class UniqueConstraint
+public sealed record UniqueConstraint
 {
   [JsonPropertyName("name")]
-  public string Name { get; set; } = string.Empty;
+  public required string Name { get; init; }
 
   [JsonPropertyName("columns")]
-  public List<string> Columns { get; set; } = new();
+  public IReadOnlyList<string> Columns { get; init; } = [];
 
   [JsonPropertyName("isClustered")]
-  public bool IsClustered { get; set; }
+  public bool IsClustered { get; init; }
 
   [JsonPropertyName("filterClause")]
-  public string? FilterClause { get; set; }
+  public string? FilterClause { get; init; }
 
   [JsonPropertyName("description")]
-  public string? Description { get; set; }
+  public string? Description { get; init; }
 }
 
-public class CheckConstraint
+public sealed record CheckConstraint
 {
   [JsonPropertyName("name")]
-  public string Name { get; set; } = string.Empty;
+  public required string Name { get; init; }
 
   [JsonPropertyName("expression")]
-  public string Expression { get; set; } = string.Empty;
+  public required string Expression { get; init; }
 
   [JsonPropertyName("description")]
-  public string? Description { get; set; }
+  public string? Description { get; init; }
 }
 
-public class IndexMetadata
+public sealed record IndexMetadata
 {
   [JsonPropertyName("name")]
-  public string Name { get; set; } = string.Empty;
+  public required string Name { get; init; }
 
   [JsonPropertyName("columns")]
-  public List<IndexColumn> Columns { get; set; } = new();
+  public IReadOnlyList<IndexColumn> Columns { get; init; } = [];
 
   [JsonPropertyName("includedColumns")]
-  public List<string>? IncludedColumns { get; set; }
+  public IReadOnlyList<string>? IncludedColumns { get; init; }
 
   [JsonPropertyName("isUnique")]
-  public bool IsUnique { get; set; }
+  public bool IsUnique { get; init; }
 
   [JsonPropertyName("isClustered")]
-  public bool IsClustered { get; set; }
+  public bool IsClustered { get; init; }
 
   [JsonPropertyName("isColumnStore")]
-  public bool IsColumnStore { get; set; }
+  public bool IsColumnStore { get; init; }
 
   [JsonPropertyName("filterClause")]
-  public string? FilterClause { get; set; }
+  public string? FilterClause { get; init; }
 
   [JsonPropertyName("description")]
-  public string? Description { get; set; }
+  public string? Description { get; init; }
 }
 
-public class IndexColumn
+public sealed record IndexColumn
 {
   [JsonPropertyName("name")]
-  public string Name { get; set; } = string.Empty;
+  public required string Name { get; init; }
 
   [JsonPropertyName("isDescending")]
-  public bool IsDescending { get; set; }
+  public bool IsDescending { get; init; }
 }

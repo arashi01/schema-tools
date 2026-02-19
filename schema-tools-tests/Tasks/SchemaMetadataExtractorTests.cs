@@ -66,7 +66,7 @@ public sealed class SchemaMetadataExtractorTests : IDisposable
       DacpacPath = "unused.dacpac",
       OutputFile = outputFile,
       TestModel = model,
-      TestConfig = new SchemaTools.Models.SchemaToolsConfig { Database = "CustomDB" }
+      TestConfig = new SchemaTools.Configuration.SchemaToolsConfig { Database = "CustomDB" }
     };
 
     task.Execute();

@@ -1,11 +1,12 @@
 ﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
+using SchemaTools.Models;
 using SchemaTools.Utilities;
 
 namespace SchemaTools.Tests.Utilities;
 
 public class ScriptDomParserTests
 {
-  private const string DefaultVersion = "Sql170";
+  private const SqlServerVersion DefaultVersion = SqlServerVersion.Sql170;
 
   // ------------------------------------------------------------------
   //  CHECK constraints
@@ -369,8 +370,8 @@ public class ScriptDomParserTests
       ScriptDomParser.ForeignKeyActionInfo info =
         ScriptDomParser.ExtractFKActions(script, DefaultVersion);
 
-      info.OnDelete.Should().Be("Cascade");
-      info.OnUpdate.Should().Be("NoAction");
+      info.OnDelete.Should().Be(ForeignKeyAction.Cascade);
+      info.OnUpdate.Should().Be(ForeignKeyAction.NoAction);
     }
 
     [Fact]
@@ -387,8 +388,8 @@ public class ScriptDomParserTests
       ScriptDomParser.ForeignKeyActionInfo info =
         ScriptDomParser.ExtractFKActions(script, DefaultVersion);
 
-      info.OnDelete.Should().Be("Cascade");
-      info.OnUpdate.Should().Be("Cascade");
+      info.OnDelete.Should().Be(ForeignKeyAction.Cascade);
+      info.OnUpdate.Should().Be(ForeignKeyAction.Cascade);
     }
 
     [Fact]
@@ -404,7 +405,7 @@ public class ScriptDomParserTests
       ScriptDomParser.ForeignKeyActionInfo info =
         ScriptDomParser.ExtractFKActions(script, DefaultVersion);
 
-      info.OnDelete.Should().Be("SetNull");
+      info.OnDelete.Should().Be(ForeignKeyAction.SetNull);
     }
 
     [Fact]
@@ -420,7 +421,7 @@ public class ScriptDomParserTests
       ScriptDomParser.ForeignKeyActionInfo info =
         ScriptDomParser.ExtractFKActions(script, DefaultVersion);
 
-      info.OnDelete.Should().Be("SetDefault");
+      info.OnDelete.Should().Be(ForeignKeyAction.SetDefault);
     }
 
     [Fact]
@@ -435,8 +436,8 @@ public class ScriptDomParserTests
       ScriptDomParser.ForeignKeyActionInfo info =
         ScriptDomParser.ExtractFKActions(script, DefaultVersion);
 
-      info.OnDelete.Should().Be("NoAction");
-      info.OnUpdate.Should().Be("NoAction");
+      info.OnDelete.Should().Be(ForeignKeyAction.NoAction);
+      info.OnUpdate.Should().Be(ForeignKeyAction.NoAction);
     }
 
     [Fact]
@@ -445,8 +446,8 @@ public class ScriptDomParserTests
       ScriptDomParser.ForeignKeyActionInfo info =
         ScriptDomParser.ExtractFKActions(null, DefaultVersion);
 
-      info.OnDelete.Should().Be("NoAction");
-      info.OnUpdate.Should().Be("NoAction");
+      info.OnDelete.Should().Be(ForeignKeyAction.NoAction);
+      info.OnUpdate.Should().Be(ForeignKeyAction.NoAction);
     }
   }
 
@@ -469,7 +470,7 @@ public class ScriptDomParserTests
       ScriptDomParser.ForeignKeyActionInfo info =
         ScriptDomParser.ExtractFKActionsByName(TableScript, "fk_order_items_order", DefaultVersion);
 
-      info.OnDelete.Should().Be("Cascade");
+      info.OnDelete.Should().Be(ForeignKeyAction.Cascade);
     }
 
     [Fact]
@@ -478,7 +479,7 @@ public class ScriptDomParserTests
       ScriptDomParser.ForeignKeyActionInfo info =
         ScriptDomParser.ExtractFKActionsByName(TableScript, "fk_order_items_product", DefaultVersion);
 
-      info.OnDelete.Should().Be("NoAction");
+      info.OnDelete.Should().Be(ForeignKeyAction.NoAction);
     }
 
     [Fact]
@@ -487,8 +488,8 @@ public class ScriptDomParserTests
       ScriptDomParser.ForeignKeyActionInfo info =
         ScriptDomParser.ExtractFKActionsByName(TableScript, "fk_nonexistent", DefaultVersion);
 
-      info.OnDelete.Should().Be("NoAction");
-      info.OnUpdate.Should().Be("NoAction");
+      info.OnDelete.Should().Be(ForeignKeyAction.NoAction);
+      info.OnUpdate.Should().Be(ForeignKeyAction.NoAction);
     }
   }
 
@@ -604,12 +605,12 @@ public class ScriptDomParserTests
   public class ConvertDeleteUpdateActionTests
   {
     [Theory]
-    [InlineData(DeleteUpdateAction.Cascade, "Cascade")]
-    [InlineData(DeleteUpdateAction.SetNull, "SetNull")]
-    [InlineData(DeleteUpdateAction.SetDefault, "SetDefault")]
-    [InlineData(DeleteUpdateAction.NoAction, "NoAction")]
-    [InlineData(DeleteUpdateAction.NotSpecified, "NoAction")]
-    public void ConvertsCorrectly(DeleteUpdateAction action, string expected)
+    [InlineData(DeleteUpdateAction.Cascade, ForeignKeyAction.Cascade)]
+    [InlineData(DeleteUpdateAction.SetNull, ForeignKeyAction.SetNull)]
+    [InlineData(DeleteUpdateAction.SetDefault, ForeignKeyAction.SetDefault)]
+    [InlineData(DeleteUpdateAction.NoAction, ForeignKeyAction.NoAction)]
+    [InlineData(DeleteUpdateAction.NotSpecified, ForeignKeyAction.NoAction)]
+    public void ConvertsCorrectly(DeleteUpdateAction action, ForeignKeyAction expected)
     {
       ScriptDomParser.ConvertDeleteUpdateAction(action).Should().Be(expected);
     }

@@ -1,4 +1,4 @@
--- @category core
+﻿-- @category core
 -- @description Core user accounts with soft-delete, temporal versioning,
 --              and reactivation cascade to dependent tables.
 
@@ -6,8 +6,8 @@ CREATE TABLE [dbo].[users]
 (
     [id]            UNIQUEIDENTIFIER    NOT NULL
         CONSTRAINT [df_users_id] DEFAULT NEWSEQUENTIALID(),
-    [email]         VARCHAR(320)        NOT NULL,
-    [display_name]  VARCHAR(200)        NOT NULL,
+    [email]         VARCHAR(320)        NOT NULL, -- @description Primary email address used for authentication
+    [display_name]  VARCHAR(200)        NOT NULL, -- @description User-facing display name
     [record_active]        BIT                 NOT NULL
         CONSTRAINT [df_users_active] DEFAULT 1,
     [record_created_by]    UNIQUEIDENTIFIER    NOT NULL,

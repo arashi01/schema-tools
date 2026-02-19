@@ -7,14 +7,18 @@ namespace SchemaTools.Utilities;
 /// TSqlFragment.ToString() returns the type name, not the SQL text --
 /// a ScriptGenerator must be used instead.
 /// </summary>
+/// <remarks>
+/// A new <see cref="Sql170ScriptGenerator"/> is created per call to ensure
+/// thread safety. Construction cost is negligible compared to the SQL
+/// generation work itself.
+/// </remarks>
 public static class ScriptFragmentFormatter
 {
-  private static readonly Sql170ScriptGenerator Generator = new(
-      new SqlScriptGeneratorOptions
-      {
-        AlignClauseBodies = false,
-        IncludeSemicolons = false
-      });
+  private static readonly SqlScriptGeneratorOptions GeneratorOptions = new()
+  {
+    AlignClauseBodies = false,
+    IncludeSemicolons = false
+  };
 
   /// <summary>
   /// Converts a TSqlFragment AST node back to its SQL text representation.
@@ -24,7 +28,8 @@ public static class ScriptFragmentFormatter
     if (fragment == null)
       return string.Empty;
 
-    Generator.GenerateScript(fragment, out string? sql);
+    var generator = new Sql170ScriptGenerator(GeneratorOptions);
+    generator.GenerateScript(fragment, out string? sql);
     return sql;
   }
 }

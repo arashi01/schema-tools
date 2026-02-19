@@ -1,4 +1,6 @@
 ﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
+using SchemaTools.Diagnostics;
+using SchemaTools.Models;
 
 namespace SchemaTools.Utilities;
 
@@ -32,11 +34,11 @@ public static class ScriptDomParser
   /// </summary>
   public sealed class ForeignKeyActionInfo
   {
-    /// <summary>ON DELETE action in PascalCase (e.g. "Cascade", "NoAction").</summary>
-    public string OnDelete { get; set; } = "NoAction";
+    /// <summary>ON DELETE action (defaults to <see cref="ForeignKeyAction.NoAction"/>).</summary>
+    public ForeignKeyAction OnDelete { get; set; } = ForeignKeyAction.NoAction;
 
-    /// <summary>ON UPDATE action in PascalCase (e.g. "Cascade", "NoAction").</summary>
-    public string OnUpdate { get; set; } = "NoAction";
+    /// <summary>ON UPDATE action (defaults to <see cref="ForeignKeyAction.NoAction"/>).</summary>
+    public ForeignKeyAction OnUpdate { get; set; } = ForeignKeyAction.NoAction;
   }
 
   // ------------------------------------------------------------------
@@ -48,7 +50,7 @@ public static class ScriptDomParser
   /// Input: "ALTER TABLE [dbo].[t] ADD CONSTRAINT [ck_x] CHECK ([col] > 0)"
   /// Output: "([col] > 0)"
   /// </summary>
-  public static string? ExtractCheckExpression(string? script, string sqlVersion = "Sql170")
+  public static string? ExtractCheckExpression(string? script, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
     if (string.IsNullOrWhiteSpace(script))
     {
@@ -77,7 +79,7 @@ public static class ScriptDomParser
   /// Extracts a CHECK expression from a CREATE TABLE script by constraint name.
   /// Searches the table DDL for named inline CHECK constraints.
   /// </summary>
-  public static string? ExtractCheckExpressionByName(string? tableScript, string constraintName, string sqlVersion = "Sql170")
+  public static string? ExtractCheckExpressionByName(string? tableScript, string constraintName, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
     if (string.IsNullOrWhiteSpace(tableScript) || string.IsNullOrEmpty(constraintName))
     {
@@ -125,7 +127,7 @@ public static class ScriptDomParser
   /// Input: "ALTER TABLE [dbo].[t] ADD CONSTRAINT [df_x] DEFAULT ((0)) FOR [col]"
   /// Output: "((0))"
   /// </summary>
-  public static string? ExtractDefaultExpression(string? script, string sqlVersion = "Sql170")
+  public static string? ExtractDefaultExpression(string? script, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
     if (string.IsNullOrWhiteSpace(script))
     {
@@ -169,7 +171,7 @@ public static class ScriptDomParser
   /// Returns null if the column is not computed or not found.
   /// </summary>
   public static ComputedColumnInfo? ExtractComputedColumn(
-    string? tableScript, string columnName, string sqlVersion = "Sql170")
+    string? tableScript, string columnName, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
     if (string.IsNullOrWhiteSpace(tableScript) || string.IsNullOrEmpty(columnName))
     {
@@ -205,7 +207,7 @@ public static class ScriptDomParser
   /// Returns a dictionary of column name -> computed column info.
   /// </summary>
   public static Dictionary<string, ComputedColumnInfo> ExtractAllComputedColumns(
-    string? tableScript, string sqlVersion = "Sql170")
+    string? tableScript, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
     var result = new Dictionary<string, ComputedColumnInfo>(StringComparer.OrdinalIgnoreCase);
 
@@ -246,7 +248,7 @@ public static class ScriptDomParser
   /// Works with ALTER TABLE ADD CONSTRAINT scripts, CREATE TABLE scripts, or FK constraint scripts.
   /// Returns the first FK constraint found.
   /// </summary>
-  public static ForeignKeyActionInfo ExtractFKActions(string? script, string sqlVersion = "Sql170")
+  public static ForeignKeyActionInfo ExtractFKActions(string? script, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
     var result = new ForeignKeyActionInfo();
     if (string.IsNullOrWhiteSpace(script))
@@ -272,7 +274,7 @@ public static class ScriptDomParser
   /// Extracts FK referential actions for a named FK constraint from a CREATE TABLE script.
   /// </summary>
   public static ForeignKeyActionInfo ExtractFKActionsByName(
-    string? tableScript, string constraintName, string sqlVersion = "Sql170")
+    string? tableScript, string constraintName, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
     var result = new ForeignKeyActionInfo();
     if (string.IsNullOrWhiteSpace(tableScript) || string.IsNullOrEmpty(constraintName))
@@ -311,7 +313,7 @@ public static class ScriptDomParser
   /// Input: "CREATE UNIQUE NONCLUSTERED INDEX ... WHERE ([active] = 1)"
   /// Output: "WHERE ([active] = 1)"
   /// </summary>
-  public static string? ExtractFilterClause(string? script, string sqlVersion = "Sql170")
+  public static string? ExtractFilterClause(string? script, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
     if (string.IsNullOrWhiteSpace(script))
     {
@@ -338,7 +340,7 @@ public static class ScriptDomParser
   /// Given expression: "([owner_type] IN ('user', 'organisation'))"
   /// Returns: ["user", "organisation"]
   /// </summary>
-  public static List<string> ExtractAllowedTypesFromExpression(string? expression, string sqlVersion = "Sql170")
+  public static List<string> ExtractAllowedTypesFromExpression(string? expression, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
     var types = new List<string>();
     if (string.IsNullOrWhiteSpace(expression))
@@ -371,9 +373,14 @@ public static class ScriptDomParser
   /// Parses a T-SQL script and returns the statements.
   /// Silently returns empty if parsing fails.
   /// </summary>
-  internal static IEnumerable<TSqlStatement> ParseStatements(string script, string sqlVersion = "Sql170")
+  internal static IEnumerable<TSqlStatement> ParseStatements(string script, SqlServerVersion sqlVersion = SqlServerVersion.Sql170)
   {
-    TSqlParser parser = ParserFactory.CreateParser(sqlVersion);
+    OperationResult<TSqlParser> parserResult = ParserFactory.CreateParser(sqlVersion);
+    if (!parserResult.IsSuccess)
+    {
+      yield break;
+    }
+    TSqlParser parser = parserResult.Value;
     using var reader = new StringReader(script);
     TSqlFragment fragment = parser.Parse(reader, out IList<ParseError> errors);
 
@@ -390,17 +397,16 @@ public static class ScriptDomParser
   }
 
   /// <summary>
-  /// Converts a ScriptDom DeleteUpdateAction enum to PascalCase string
-  /// matching the format used by DacFx ForeignKeyAction.ToString().
+  /// Converts a ScriptDom <see cref="DeleteUpdateAction"/> to a <see cref="ForeignKeyAction"/> enum value.
   /// </summary>
-  internal static string ConvertDeleteUpdateAction(DeleteUpdateAction action)
+  internal static ForeignKeyAction ConvertDeleteUpdateAction(DeleteUpdateAction action)
   {
     return action switch
     {
-      DeleteUpdateAction.Cascade => "Cascade",
-      DeleteUpdateAction.SetNull => "SetNull",
-      DeleteUpdateAction.SetDefault => "SetDefault",
-      _ => "NoAction"
+      DeleteUpdateAction.Cascade => ForeignKeyAction.Cascade,
+      DeleteUpdateAction.SetNull => ForeignKeyAction.SetNull,
+      DeleteUpdateAction.SetDefault => ForeignKeyAction.SetDefault,
+      _ => ForeignKeyAction.NoAction
     };
   }
 

@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Microsoft.Build.Framework;
+using SchemaTools.Diagnostics;
 using SchemaTools.Models;
 using SchemaTools.Utilities;
 using MSTask = Microsoft.Build.Utilities.Task;
@@ -8,15 +9,15 @@ namespace SchemaTools.Tasks;
 
 /// <summary>
 /// Generates filtered views for soft-delete tables to simplify application queries.
-/// 
+///
 /// Generated views:
 /// - Active view (vw_{table}): SELECT * WHERE active = 1
 /// - Deleted view (vw_{table}_deleted): SELECT * WHERE active = 0 (optional)
-/// 
+///
 /// Benefits:
 /// - Application code queries vw_users instead of users WHERE active = 1
 /// - Centralised soft-delete filter logic
-/// - Query optimizer inlines views (no performance penalty)
+/// - Query optimiser inlines views (no performance penalty)
 /// - Explicit-wins policy: user-defined views take precedence
 /// </summary>
 public class SqlViewGenerator : MSTask
@@ -64,7 +65,13 @@ public class SqlViewGenerator : MSTask
       Log.LogMessage(MessageImportance.High, "============================================================");
       Log.LogMessage(MessageImportance.High, string.Empty);
 
-      SourceAnalysisResult analysis = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
+      OperationResult<SourceAnalysisResult> analysisResult = AnalysisLoader.Load(AnalysisFile, TestAnalysis);
+      if (!analysisResult.IsSuccess)
+      {
+        DiagnosticReporter.Report(Log, analysisResult.Diagnostics);
+        return false;
+      }
+      SourceAnalysisResult analysis = analysisResult.Value;
 
       var softDeleteTables = analysis.Tables
         .Where(t => t.HasSoftDelete && t.SoftDeleteMode != SoftDeleteMode.Ignore)

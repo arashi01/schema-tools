@@ -1,30 +1,50 @@
-﻿using Microsoft.SqlServer.TransactSql.ScriptDom;
+﻿using System.Collections.Concurrent;
+using Microsoft.SqlServer.TransactSql.ScriptDom;
+using SchemaTools.Diagnostics;
+using SchemaTools.Models;
 
 namespace SchemaTools.Utilities;
 
 /// <summary>
-/// Creates ScriptDom parsers matched to the configured SQL Server version.
+/// Creates and caches ScriptDom parsers matched to the configured SQL Server version.
+/// Parsers are safe to share across calls -- <c>TSqlParser.Parse</c> creates fresh
+/// internal state on each invocation.
 /// </summary>
-public static class ParserFactory
+internal static class ParserFactory
 {
+  private static readonly ConcurrentDictionary<SqlServerVersion, TSqlParser> Cache = new();
+
   /// <summary>
-  /// Creates a TSqlParser for the specified SQL Server version string.
-  /// Version strings match the DacFx DSP naming convention (e.g. "Sql170" for SQL Server 2025).
+  /// Returns a cached <see cref="TSqlParser"/> for the specified SQL Server version.
   /// </summary>
-  /// <exception cref="ArgumentException">Thrown when the version string is not recognised.</exception>
-  public static TSqlParser CreateParser(string version)
+  internal static OperationResult<TSqlParser> CreateParser(SqlServerVersion version)
   {
-    return version switch
+    if (Cache.TryGetValue(version, out TSqlParser? cached))
     {
-      "Sql100" => new TSql100Parser(initialQuotedIdentifiers: true),
-      "Sql110" => new TSql110Parser(initialQuotedIdentifiers: true),
-      "Sql120" => new TSql120Parser(initialQuotedIdentifiers: true),
-      "Sql130" => new TSql130Parser(initialQuotedIdentifiers: true),
-      "Sql140" => new TSql140Parser(initialQuotedIdentifiers: true),
-      "Sql150" => new TSql150Parser(initialQuotedIdentifiers: true),
-      "Sql160" => new TSql160Parser(initialQuotedIdentifiers: true),
-      "Sql170" => new TSql170Parser(initialQuotedIdentifiers: true),
-      _ => throw new ArgumentException($"Unsupported SQL Server version: {version}")
+      return OperationResult<TSqlParser>.Success(cached);
+    }
+
+    TSqlParser? parser = version switch
+    {
+      SqlServerVersion.Sql100 => new TSql100Parser(initialQuotedIdentifiers: true),
+      SqlServerVersion.Sql110 => new TSql110Parser(initialQuotedIdentifiers: true),
+      SqlServerVersion.Sql120 => new TSql120Parser(initialQuotedIdentifiers: true),
+      SqlServerVersion.Sql130 => new TSql130Parser(initialQuotedIdentifiers: true),
+      SqlServerVersion.Sql140 => new TSql140Parser(initialQuotedIdentifiers: true),
+      SqlServerVersion.Sql150 => new TSql150Parser(initialQuotedIdentifiers: true),
+      SqlServerVersion.Sql160 => new TSql160Parser(initialQuotedIdentifiers: true),
+      SqlServerVersion.Sql170 => new TSql170Parser(initialQuotedIdentifiers: true),
+      _ => null
     };
+
+    if (parser == null)
+    {
+      return OperationResult<TSqlParser>.Fail(new[]
+      {
+        new GenerationError { Code = "ST3003", Message = $"Unsupported SQL Server version: {version}" }
+      });
+    }
+
+    return OperationResult<TSqlParser>.Success(Cache.GetOrAdd(version, parser));
   }
 }

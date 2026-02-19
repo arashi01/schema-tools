@@ -1,7 +1,10 @@
 ﻿using System.Text.Json;
 using Microsoft.SqlServer.Dac.Model;
+using SchemaTools.Configuration;
 using SchemaTools.Extraction;
 using SchemaTools.Models;
+
+using DacSqlServerVersion = Microsoft.SqlServer.Dac.Model.SqlServerVersion;
 
 namespace SchemaTools.Tests.Extraction;
 
@@ -554,7 +557,7 @@ public sealed class DacpacMetadataEngineTests : IDisposable
 
   private static TSqlModel CreateModel(params string[] statements)
   {
-    var model = new TSqlModel(SqlServerVersion.Sql170, new TSqlModelOptions());
+    var model = new TSqlModel(DacSqlServerVersion.Sql170, new TSqlModelOptions());
     foreach (string sql in statements)
     {
       model.AddObjects(sql);
@@ -568,7 +571,9 @@ public sealed class DacpacMetadataEngineTests : IDisposable
     TSqlModel model,
     string outputFile,
     SchemaToolsConfig? config = null,
-    Dictionary<string, string>? categories = null)
+    Dictionary<string, string>? categories = null,
+    Dictionary<string, string>? descriptions = null,
+    Dictionary<string, Dictionary<string, string>>? columnDescriptions = null)
   {
     var engine = new DacpacMetadataEngine(
       "unused.dacpac",
@@ -583,7 +588,9 @@ public sealed class DacpacMetadataEngineTests : IDisposable
     {
       OverrideModel = model,
       OverrideConfig = config,
-      OverrideCategories = categories
+      OverrideCategories = categories,
+      OverrideDescriptions = descriptions,
+      OverrideColumnDescriptions = columnDescriptions
     };
 
     return engine.Execute();

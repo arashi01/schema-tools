@@ -48,7 +48,11 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
 
-    <!-- Build settings -->
+    <!-- GenerateDocumentationFile is required by EnforceCodeStyleInBuild for
+         IDE0005 (unused usings). CS1591 (missing XML docs) is suppressed because
+         this project has no public API surface: all public types are either
+         MSBuild tasks (instantiated by reflection) or internal models exposed
+         to tests via InternalsVisibleTo. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
@@ -100,6 +104,10 @@
     <!-- SQL Server ScriptDom for parsing T-SQL (bundled in package) -->
     <PackageReference Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="170.157.0"
                       PrivateAssets="all" />
+
+    <!-- Compiler attribute polyfills for netstandard2.0 (IsExternalInit, required, etc.)
+         Source generator: emits internal polyfill types at compile time, zero runtime cost -->
+    <PackageReference Include="PolySharp" Version="1.15.0" PrivateAssets="all" />
 
     <!-- Source link for debugging -->
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103" PrivateAssets="all" />

@@ -5,113 +5,120 @@
 /// Produced by SchemaSourceAnalyser, consumed by SqlTriggerGenerator,
 /// SqlProcedureGenerator, and SqlViewGenerator.
 /// </summary>
-public class SourceAnalysisResult
+public sealed record SourceAnalysisResult
 {
-  public string Version { get; set; } = SchemaToolsDefaults.MetadataVersion;
-  public DateTime AnalysedAt { get; set; }
-  public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
-  public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
-  public List<TableAnalysis> Tables { get; set; } = new();
-  public ColumnConfig Columns { get; set; } = new();
-  public FeatureFlags Features { get; set; } = new();
+  public string Version { get; init; } = SchemaToolsDefaults.MetadataVersion;
+  public DateTime AnalysedAt { get; init; }
+  public SqlServerVersion SqlServerVersion { get; init; } = SqlServerVersion.Sql170;
+  public string DefaultSchema { get; init; } = SchemaToolsDefaults.DefaultSchema;
+  public IReadOnlyList<TableAnalysis> Tables { get; init; } = [];
+  public ColumnConfig Columns { get; init; } = new();
+  public FeatureFlags Features { get; init; } = new();
 
   /// <summary>
   /// Existing triggers discovered in the project (for explicit-wins policy).
   /// </summary>
-  public List<ExistingTrigger> ExistingTriggers { get; set; } = new();
+  public IReadOnlyList<ExistingTrigger> ExistingTriggers { get; init; } = [];
 
   /// <summary>
   /// Existing views discovered in the project (for explicit-wins policy).
   /// </summary>
-  public List<ExistingView> ExistingViews { get; set; } = new();
+  public IReadOnlyList<ExistingView> ExistingViews { get; init; } = [];
 
-  public string GeneratedTriggersDirectory { get; set; } = string.Empty;
-  public string GeneratedViewsDirectory { get; set; } = string.Empty;
+  public string GeneratedTriggersDirectory { get; init; } = string.Empty;
+  public string GeneratedViewsDirectory { get; init; } = string.Empty;
 }
 
-public class ColumnConfig
+public sealed record ColumnConfig
 {
-  public string Active { get; set; } = SchemaToolsDefaults.ActiveColumn;
-  public string ActiveValue { get; set; } = SchemaToolsDefaults.ActiveValue;
-  public string InactiveValue { get; set; } = SchemaToolsDefaults.InactiveValue;
-  public string UpdatedBy { get; set; } = SchemaToolsDefaults.UpdatedByColumn;
-  public string UpdatedByType { get; set; } = SchemaToolsDefaults.UpdatedByType;
-  public string ValidFrom { get; set; } = SchemaToolsDefaults.ValidFromColumn;
-  public string ValidTo { get; set; } = SchemaToolsDefaults.ValidToColumn;
+  public string Active { get; init; } = SchemaToolsDefaults.ActiveColumn;
+  public string ActiveValue { get; init; } = SchemaToolsDefaults.ActiveValue;
+  public string InactiveValue { get; init; } = SchemaToolsDefaults.InactiveValue;
+  public string UpdatedBy { get; init; } = SchemaToolsDefaults.UpdatedByColumn;
+  public string UpdatedByType { get; init; } = SchemaToolsDefaults.UpdatedByType;
+  public string ValidFrom { get; init; } = SchemaToolsDefaults.ValidFromColumn;
+  public string ValidTo { get; init; } = SchemaToolsDefaults.ValidToColumn;
 }
 
-public class FeatureFlags
+public sealed record FeatureFlags
 {
-  public bool GenerateReactivationGuards { get; set; } = true;
+  public bool GenerateReactivationGuards { get; init; } = true;
 }
 
-public class ExistingTrigger
+public sealed record ExistingTrigger
 {
-  public string Name { get; set; } = string.Empty;
-  public string Schema { get; set; } = SchemaToolsDefaults.DefaultSchema;
-  public string TargetTable { get; set; } = string.Empty;
-  public string SourceFile { get; set; } = string.Empty;
-  public bool IsGenerated { get; set; }
+  public required string Name { get; init; }
+  public string Schema { get; init; } = SchemaToolsDefaults.DefaultSchema;
+  public required string TargetTable { get; init; }
+  public required string SourceFile { get; init; }
+  public bool IsGenerated { get; init; }
 }
 
-public class ExistingView
+public sealed record ExistingView
 {
-  public string Name { get; set; } = string.Empty;
-  public string Schema { get; set; } = SchemaToolsDefaults.DefaultSchema;
-  public string SourceFile { get; set; } = string.Empty;
-  public bool IsGenerated { get; set; }
+  public required string Name { get; init; }
+  public string Schema { get; init; } = SchemaToolsDefaults.DefaultSchema;
+  public required string SourceFile { get; init; }
+  public bool IsGenerated { get; init; }
 }
 
-public class TableAnalysis
+public sealed record TableAnalysis
 {
-  public string Name { get; set; } = string.Empty;
-  public string Schema { get; set; } = SchemaToolsDefaults.DefaultSchema;
-  public string? Category { get; set; }
-  public string SourceFile { get; set; } = string.Empty;
+  public required string Name { get; init; }
+  public string Schema { get; init; } = SchemaToolsDefaults.DefaultSchema;
+  public string? Category { get; init; }
+  public string? Description { get; init; }
+  public string SourceFile { get; init; } = string.Empty;
 
   // Soft-delete pattern detection
-  public bool HasActiveColumn { get; set; }
-  public bool HasTemporalVersioning { get; set; }
-  public bool HasSoftDelete { get; set; }
-  public string? ActiveColumnName { get; set; }
+  public bool HasActiveColumn { get; init; }
+  public bool HasTemporalVersioning { get; init; }
+  public bool HasSoftDelete { get; init; }
+  public string? ActiveColumnName { get; init; }
 
-  public string? HistoryTable { get; set; }
-  public string? ValidFromColumn { get; set; }
-  public string? ValidToColumn { get; set; }
+  public string? HistoryTable { get; init; }
+  public string? ValidFromColumn { get; init; }
+  public string? ValidToColumn { get; init; }
 
   /// <summary>
   /// Soft-delete trigger mode for this table.
   /// Determines whether cascade, restrict, or ignore behaviour is used.
   /// </summary>
-  public SoftDeleteMode SoftDeleteMode { get; set; } = SoftDeleteMode.Cascade;
+  public SoftDeleteMode SoftDeleteMode { get; init; } = SoftDeleteMode.Cascade;
 
   /// <summary>
   /// Whether reactivation cascade is enabled for this table.
   /// When true, reactivating this parent will auto-reactivate children
   /// that were soft-deleted at the same time.
   /// </summary>
-  public bool ReactivationCascade { get; set; } = false;
+  public bool ReactivationCascade { get; init; } = false;
 
   /// <summary>
   /// Tolerance in milliseconds for matching child soft-delete timestamps
   /// during reactivation cascade.
   /// </summary>
-  public int ReactivationCascadeToleranceMs { get; set; } = SchemaToolsDefaults.ReactivationCascadeToleranceMs;
+  public int ReactivationCascadeToleranceMs { get; init; } = SchemaToolsDefaults.ReactivationCascadeToleranceMs;
 
   // Keys and relationships
-  public List<string> PrimaryKeyColumns { get; set; } = new();
-  public List<ForeignKeyRef> ForeignKeyReferences { get; set; } = new();
+  public IReadOnlyList<string> PrimaryKeyColumns { get; init; } = [];
+  public IReadOnlyList<ForeignKeyRef> ForeignKeyReferences { get; init; } = [];
+
+  /// <summary>
+  /// Column-level descriptions parsed from trailing <c>@description</c> annotations.
+  /// Keys are column names; values are description text.
+  /// </summary>
+  public IReadOnlyDictionary<string, string>? ColumnDescriptions { get; init; }
 
   // FK graph (computed)
-  public List<string> ChildTables { get; set; } = new();
-  public bool IsLeafTable { get; set; }
+  public IReadOnlyList<string> ChildTables { get; init; } = [];
+  public bool IsLeafTable { get; init; }
 }
 
-public class ForeignKeyRef
+public sealed record ForeignKeyRef
 {
-  public string ReferencedTable { get; set; } = string.Empty;
-  public string ReferencedSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
-  public List<string> Columns { get; set; } = new();
-  public List<string> ReferencedColumns { get; set; } = new();
-  public string OnDelete { get; set; } = SchemaToolsDefaults.ForeignKeyOnDeleteDefault;
+  public required string ReferencedTable { get; init; }
+  public string ReferencedSchema { get; init; } = SchemaToolsDefaults.DefaultSchema;
+  public IReadOnlyList<string> Columns { get; init; } = [];
+  public IReadOnlyList<string> ReferencedColumns { get; init; } = [];
+  public ForeignKeyAction OnDelete { get; init; } = ForeignKeyAction.NoAction;
 }

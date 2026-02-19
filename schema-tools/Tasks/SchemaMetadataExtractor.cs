@@ -1,7 +1,7 @@
 ﻿using Microsoft.Build.Framework;
 using Microsoft.SqlServer.Dac.Model;
+using SchemaTools.Configuration;
 using SchemaTools.Extraction;
-using SchemaTools.Models;
 using MSTask = Microsoft.Build.Utilities.Task;
 
 namespace SchemaTools.Tasks;

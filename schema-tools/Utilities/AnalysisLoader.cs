@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using SchemaTools.Diagnostics;
 using SchemaTools.Models;
 
 namespace SchemaTools.Utilities;
@@ -17,29 +18,45 @@ internal static class AnalysisLoader
   /// <summary>
   /// Loads a <see cref="SourceAnalysisResult"/> from the given file path,
   /// or returns the test override if provided.
+  /// Returns a failed <see cref="OperationResult{T}"/> when the file is
+  /// missing or deserialisation fails.
   /// </summary>
-  /// <exception cref="FileNotFoundException">Thrown when the analysis file does not exist.</exception>
-  /// <exception cref="InvalidOperationException">Thrown when deserialisation fails.</exception>
-  internal static SourceAnalysisResult Load(string filePath, SourceAnalysisResult? testOverride = null)
+  internal static OperationResult<SourceAnalysisResult> Load(string filePath, SourceAnalysisResult? testOverride = null)
   {
     if (testOverride != null)
     {
-      return testOverride;
+      return OperationResult<SourceAnalysisResult>.Success(testOverride);
     }
 
     if (!File.Exists(filePath))
     {
-      throw new FileNotFoundException($"Analysis file not found: {filePath}");
+      return OperationResult<SourceAnalysisResult>.Fail(new[]
+      {
+        new GenerationError { Code = "ST3001", Message = $"Analysis file not found: {filePath}" }
+      });
     }
 
-    string json = File.ReadAllText(filePath);
-    SourceAnalysisResult? analysis = JsonSerializer.Deserialize<SourceAnalysisResult>(json, DeserialiseOptions);
-
-    if (analysis == null || analysis.Tables == null)
+    try
     {
-      throw new InvalidOperationException("Failed to deserialise analysis file");
-    }
+      string json = File.ReadAllText(filePath);
+      SourceAnalysisResult? analysis = JsonSerializer.Deserialize<SourceAnalysisResult>(json, DeserialiseOptions);
 
-    return analysis;
+      if (analysis == null || analysis.Tables == null)
+      {
+        return OperationResult<SourceAnalysisResult>.Fail(new[]
+        {
+          new GenerationError { Code = "ST3002", Message = $"Failed to deserialise analysis file: {filePath}" }
+        });
+      }
+
+      return OperationResult<SourceAnalysisResult>.Success(analysis);
+    }
+    catch (JsonException ex)
+    {
+      return OperationResult<SourceAnalysisResult>.Fail(new[]
+      {
+        new GenerationError { Code = "ST3002", Message = $"Failed to deserialise analysis file: {filePath} - {ex.Message}" }
+      });
+    }
   }
 }

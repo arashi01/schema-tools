@@ -1,31 +1,7 @@
 ﻿using System.Text.Json.Serialization;
+using SchemaTools.Models;
 
-namespace SchemaTools.Models;
-
-/// <summary>
-/// Soft-delete trigger mode for parent tables.
-/// </summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
-public enum SoftDeleteMode
-{
-  /// <summary>
-  /// Cascade soft-delete to children automatically (default).
-  /// When parent.active = 0, all children.active = 0.
-  /// </summary>
-  Cascade,
-
-  /// <summary>
-  /// Restrict soft-delete if active children exist.
-  /// Must soft-delete children first before parent.
-  /// </summary>
-  Restrict,
-
-  /// <summary>
-  /// Ignore - no trigger generated for this table.
-  /// Table excluded from soft-delete handling entirely.
-  /// </summary>
-  Ignore
-}
+namespace SchemaTools.Configuration;
 
 /// <summary>
 /// Per-project configuration for schema tools
@@ -39,7 +15,7 @@ public class SchemaToolsConfig
   public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
 
   [JsonPropertyName("sqlServerVersion")]
-  public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
+  public SqlServerVersion SqlServerVersion { get; set; } = SqlServerVersion.Sql170;
 
   [JsonPropertyName("features")]
   public FeatureConfig Features { get; set; } = new();
@@ -111,11 +87,7 @@ public class SchemaToolsConfig
     if (pattern.StartsWith(categoryPrefix, StringComparison.OrdinalIgnoreCase) &&
         !string.IsNullOrEmpty(category))
     {
-#if NETSTANDARD2_0
-      string categoryValue = pattern.Substring(categoryPrefix.Length).Trim();
-#else
       string categoryValue = pattern[categoryPrefix.Length..].Trim();
-#endif
       if (string.Equals(categoryValue, category, StringComparison.OrdinalIgnoreCase))
         return true;
     }
@@ -283,6 +255,26 @@ public class DocumentationConfig
 
   [JsonPropertyName("includeIndexes")]
   public bool IncludeIndexes { get; set; } = false;
+
+  /// <summary>
+  /// Controls how temporal history tables appear in generated documentation.
+  /// </summary>
+  [JsonPropertyName("historyTables")]
+  public HistoryTableMode HistoryTables { get; set; } = HistoryTableMode.None;
+
+  /// <summary>
+  /// When enabled, infrastructure columns (soft-delete flags, temporal period columns,
+  /// audit trail columns) are visually grouped and styled distinctly from domain columns.
+  /// </summary>
+  [JsonPropertyName("infrastructureColumnStyling")]
+  public bool InfrastructureColumnStyling { get; set; } = true;
+
+  /// <summary>
+  /// When enabled, ER diagrams show only domain columns, excluding infrastructure
+  /// columns (soft-delete, temporal, audit) for diagram clarity.
+  /// </summary>
+  [JsonPropertyName("erDiagramDomainColumnsOnly")]
+  public bool ErDiagramDomainColumnsOnly { get; set; } = true;
 }
 
 /// <summary>

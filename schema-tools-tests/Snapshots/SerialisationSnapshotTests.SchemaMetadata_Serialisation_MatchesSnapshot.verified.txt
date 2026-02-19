@@ -1,0 +1,209 @@
+﻿{
+  $schema: ./schema.schema.json,
+  version: 1.0.0-snapshot,
+  generatedAt: DateTimeOffset_1,
+  generatedBy: SnapshotTest,
+  database: SnapshotTestDB,
+  defaultSchema: dbo,
+  sqlServerVersion: Sql170,
+  tables: [
+    {
+      name: users,
+      schema: dbo,
+      category: core,
+      description: Stores user accounts,
+      hasTemporalVersioning: true,
+      hasActiveColumn: true,
+      hasSoftDelete: true,
+      activeColumnName: record_active,
+      isAppendOnly: false,
+      isPolymorphic: false,
+      primaryKey: id,
+      primaryKeyType: UNIQUEIDENTIFIER,
+      historyTable: [dbo].[users_history],
+      isHistoryTable: false,
+      columns: [
+        {
+          name: id,
+          type: UNIQUEIDENTIFIER,
+          isMaxLength: false,
+          nullable: false,
+          isPrimaryKey: true,
+          isIdentity: false,
+          isComputed: false,
+          isPersisted: false,
+          isPolymorphicForeignKey: false,
+          isCompositeFK: false,
+          isUnique: false,
+          isGeneratedAlways: false
+        },
+        {
+          name: record_created_by,
+          type: UNIQUEIDENTIFIER,
+          isMaxLength: false,
+          nullable: false,
+          isPrimaryKey: false,
+          isIdentity: false,
+          isComputed: false,
+          isPersisted: false,
+          isPolymorphicForeignKey: false,
+          isCompositeFK: false,
+          isUnique: false,
+          isGeneratedAlways: false
+        },
+        {
+          name: record_updated_by,
+          type: UNIQUEIDENTIFIER,
+          isMaxLength: false,
+          nullable: false,
+          isPrimaryKey: false,
+          isIdentity: false,
+          isComputed: false,
+          isPersisted: false,
+          isPolymorphicForeignKey: false,
+          isCompositeFK: false,
+          isUnique: false,
+          isGeneratedAlways: false
+        },
+        {
+          name: email,
+          type: NVARCHAR,
+          maxLength: 256,
+          isMaxLength: false,
+          nullable: false,
+          isPrimaryKey: false,
+          isIdentity: false,
+          isComputed: false,
+          isPersisted: false,
+          isPolymorphicForeignKey: false,
+          isCompositeFK: false,
+          isUnique: true,
+          isGeneratedAlways: false
+        },
+        {
+          name: tenant_id,
+          type: UNIQUEIDENTIFIER,
+          isMaxLength: false,
+          nullable: false,
+          isPrimaryKey: false,
+          isIdentity: false,
+          isComputed: false,
+          isPersisted: false,
+          foreignKey: {
+            table: tenants,
+            column: id,
+            schema: dbo
+          },
+          isPolymorphicForeignKey: false,
+          isCompositeFK: false,
+          isUnique: false,
+          isGeneratedAlways: false
+        }
+      ],
+      constraints: {
+        primaryKey: {
+          name: pk_users,
+          columns: [
+            id
+          ],
+          isClustered: true
+        },
+        foreignKeys: [
+          {
+            name: fk_users_tenant_id,
+            columns: [
+              tenant_id
+            ],
+            referencedTable: tenants,
+            referencedSchema: dbo,
+            referencedColumns: [
+              id
+            ],
+            onDelete: NoAction,
+            onUpdate: NoAction,
+            isComposite: false
+          }
+        ]
+      }
+    },
+    {
+      name: audit_log,
+      schema: dbo,
+      category: audit,
+      hasTemporalVersioning: false,
+      hasActiveColumn: false,
+      hasSoftDelete: false,
+      isAppendOnly: true,
+      isPolymorphic: false,
+      primaryKey: id,
+      primaryKeyType: BIGINT,
+      isHistoryTable: false,
+      columns: [
+        {
+          name: id,
+          type: UNIQUEIDENTIFIER,
+          isMaxLength: false,
+          nullable: false,
+          isPrimaryKey: true,
+          isIdentity: false,
+          isComputed: false,
+          isPersisted: false,
+          isPolymorphicForeignKey: false,
+          isCompositeFK: false,
+          isUnique: false,
+          isGeneratedAlways: false
+        },
+        {
+          name: record_created_by,
+          type: UNIQUEIDENTIFIER,
+          isMaxLength: false,
+          nullable: false,
+          isPrimaryKey: false,
+          isIdentity: false,
+          isComputed: false,
+          isPersisted: false,
+          isPolymorphicForeignKey: false,
+          isCompositeFK: false,
+          isUnique: false,
+          isGeneratedAlways: false
+        },
+        {
+          name: record_updated_by,
+          type: UNIQUEIDENTIFIER,
+          isMaxLength: false,
+          nullable: false,
+          isPrimaryKey: false,
+          isIdentity: false,
+          isComputed: false,
+          isPersisted: false,
+          isPolymorphicForeignKey: false,
+          isCompositeFK: false,
+          isUnique: false,
+          isGeneratedAlways: false
+        }
+      ],
+      constraints: {
+        primaryKey: {
+          name: pk_audit_log,
+          columns: [
+            id
+          ],
+          isClustered: true
+        }
+      }
+    }
+  ],
+  statistics: {
+    totalTables: 2,
+    temporalTables: 1,
+    softDeleteTables: 1,
+    appendOnlyTables: 1,
+    polymorphicTables: 0,
+    totalColumns: 8,
+    totalConstraints: 3
+  },
+  categories: {
+    core: Core identity tables,
+    audit: Audit trail tables
+  }
+}

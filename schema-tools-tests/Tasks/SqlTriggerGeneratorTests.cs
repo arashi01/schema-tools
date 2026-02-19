@@ -188,14 +188,17 @@ public class SqlTriggerGeneratorTests : IDisposable
     );
 
     // Add an explicit trigger (not in _generated directory)
-    analysis.ExistingTriggers.Add(new ExistingTrigger
+    analysis = analysis with
     {
-      Name = "trg_users_cascade_soft_delete",
-      Schema = "test",
-      TargetTable = "users",
-      SourceFile = "Schema/Triggers/my_custom_triggers.sql",
-      IsGenerated = false  // Explicit = not in _generated directory
-    });
+      ExistingTriggers = [..analysis.ExistingTriggers, new ExistingTrigger
+      {
+        Name = "trg_users_cascade_soft_delete",
+        Schema = "test",
+        TargetTable = "users",
+        SourceFile = "Schema/Triggers/my_custom_triggers.sql",
+        IsGenerated = false  // Explicit = not in _generated directory
+      }]
+    };
 
     SqlTriggerGenerator task = CreateTask(analysis);
 
@@ -479,14 +482,17 @@ public class SqlTriggerGeneratorTests : IDisposable
       ]
     };
     SourceAnalysisResult analysis = CreateAnalysis(parent, child);
-    analysis.ExistingTriggers.Add(new ExistingTrigger
+    analysis = analysis with
     {
-      Name = "trg_orders_reactivation_guard",
-      Schema = "test",
-      TargetTable = "orders",
-      SourceFile = "Schema/Triggers/custom_guards.sql",
-      IsGenerated = false
-    });
+      ExistingTriggers = [..analysis.ExistingTriggers, new ExistingTrigger
+      {
+        Name = "trg_orders_reactivation_guard",
+        Schema = "test",
+        TargetTable = "orders",
+        SourceFile = "Schema/Triggers/custom_guards.sql",
+        IsGenerated = false
+      }]
+    };
 
     SqlTriggerGenerator task = CreateTask(analysis);
 
@@ -693,8 +699,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       ReactivationCascade = true,
       SoftDeleteMode = SoftDeleteMode.Cascade
     };
-    TableAnalysis child = LeafTable("orders", "user_id", "users");
-    child.ValidToColumn = "record_valid_until";
+    TableAnalysis child = LeafTable("orders", "user_id", "users") with { ValidToColumn = "record_valid_until" };
     SourceAnalysisResult analysis = CreateAnalysis(parent, child);
     SqlTriggerGenerator task = CreateTask(analysis);
 
@@ -716,8 +721,7 @@ public class SqlTriggerGeneratorTests : IDisposable
   public void Execute_DoesNotGenerateReactivationCascade_WhenDisabled()
   {
     // Arrange: Parent table without ReactivationCascade
-    TableAnalysis parent = ParentTable("users", "orders");
-    parent.ReactivationCascade = false;
+    TableAnalysis parent = ParentTable("users", "orders") with { ReactivationCascade = false };
     TableAnalysis child = LeafTable("orders", "user_id", "users");
     SourceAnalysisResult analysis = CreateAnalysis(parent, child);
     SqlTriggerGenerator task = CreateTask(analysis);
@@ -813,14 +817,17 @@ public class SqlTriggerGeneratorTests : IDisposable
     };
     TableAnalysis child = LeafTable("orders", "user_id", "users");
     SourceAnalysisResult analysis = CreateAnalysis(parent, child);
-    analysis.ExistingTriggers.Add(new ExistingTrigger
+    analysis = analysis with
     {
-      Name = "trg_users_cascade_reactivation",
-      Schema = "test",
-      TargetTable = "users",
-      SourceFile = "my_triggers.sql",
-      IsGenerated = false
-    });
+      ExistingTriggers = [..analysis.ExistingTriggers, new ExistingTrigger
+      {
+        Name = "trg_users_cascade_reactivation",
+        Schema = "test",
+        TargetTable = "users",
+        SourceFile = "my_triggers.sql",
+        IsGenerated = false
+      }]
+    };
     SqlTriggerGenerator task = CreateTask(analysis);
 
     // Act
@@ -935,8 +942,7 @@ public class SqlTriggerGeneratorTests : IDisposable
       ReactivationCascadeToleranceMs = 500,
       SoftDeleteMode = SoftDeleteMode.Cascade
     };
-    TableAnalysis child = LeafTable("orders", "user_id", "users");
-    child.ValidToColumn = "record_valid_until";
+    TableAnalysis child = LeafTable("orders", "user_id", "users") with { ValidToColumn = "record_valid_until" };
     SourceAnalysisResult analysis = CreateAnalysis(parent, child);
     SqlTriggerGenerator task = CreateTask(analysis);
 
@@ -1017,10 +1023,10 @@ public class SqlTriggerGeneratorTests : IDisposable
     guardContent.Should().NotContain("i.id = d.id");
   }
 
-  // --- Missing PK in cascade trigger throws --------------------------------
+  // --- Missing PK in cascade trigger reports diagnostic ----------------------
 
   [Fact]
-  public void Execute_MissingPrimaryKey_FailsWithError()
+  public void Execute_MissingPrimaryKey_CascadeTrigger_ReportsSTDiagnostic()
   {
     // Arrange: parent with no PK columns
     TableAnalysis parent = new()
@@ -1043,8 +1049,83 @@ public class SqlTriggerGeneratorTests : IDisposable
     // Act
     bool result = task.Execute();
 
-    // Assert: should fail because PK is required for trigger generation
+    // Assert: should fail with ST3010 diagnostic about missing PK
     result.Should().BeFalse();
+    var engine = (MockBuildEngine)task.BuildEngine;
+    engine.Errors.Should().ContainSingle()
+      .Which.Should().Contain("no primary key columns detected")
+      .And.Contain("no_pk_parent");
+  }
+
+  [Fact]
+  public void Execute_MissingPrimaryKey_ReactivationGuard_ReportsSTDiagnostic()
+  {
+    // Arrange: child with soft-delete parent but child has no PK
+    TableAnalysis parent = ParentTable("parent", "no_pk_child");
+    TableAnalysis child = new()
+    {
+      Name = "no_pk_child",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasActiveColumn = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "record_active",
+      PrimaryKeyColumns = [],
+      ChildTables = [],
+      IsLeafTable = true,
+      ForeignKeyReferences =
+      [
+        new ForeignKeyRef
+        {
+          ReferencedTable = "parent",
+          ReferencedSchema = "test",
+          Columns = ["parent_id"],
+          ReferencedColumns = ["id"]
+        }
+      ]
+    };
+    SourceAnalysisResult analysis = CreateAnalysis(parent, child);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    bool result = task.Execute();
+
+    // Assert: cascade trigger for parent succeeds, but reactivation guard fails
+    // because child has no PK
+    var engine = (MockBuildEngine)task.BuildEngine;
+    engine.Errors.Should().Contain(e =>
+      e.Contains("no primary key columns detected") && e.Contains("no_pk_child"));
+  }
+
+  [Fact]
+  public void Execute_MissingPrimaryKey_ReactivationCascade_ReportsSTDiagnostic()
+  {
+    // Arrange: parent with reactivation cascade enabled but no PK
+    TableAnalysis parent = new()
+    {
+      Name = "no_pk_cascade_parent",
+      Schema = "test",
+      HasSoftDelete = true,
+      HasActiveColumn = true,
+      HasTemporalVersioning = true,
+      ActiveColumnName = "record_active",
+      PrimaryKeyColumns = [],
+      ChildTables = ["leaf"],
+      IsLeafTable = false,
+      SoftDeleteMode = SoftDeleteMode.Cascade,
+      ReactivationCascade = true
+    };
+    TableAnalysis leaf = LeafTable("leaf", "parent_id", "no_pk_cascade_parent");
+    SourceAnalysisResult analysis = CreateAnalysis(parent, leaf);
+    SqlTriggerGenerator task = CreateTask(analysis);
+
+    // Act
+    bool result = task.Execute();
+
+    // Assert
+    var engine = (MockBuildEngine)task.BuildEngine;
+    engine.Errors.Should().Contain(e =>
+      e.Contains("no primary key columns detected") && e.Contains("no_pk_cascade_parent"));
   }
 
   public void Dispose()

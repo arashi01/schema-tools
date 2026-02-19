@@ -2,59 +2,59 @@
 
 namespace SchemaTools.Models;
 
-public class SchemaMetadata
+public sealed record SchemaMetadata
 {
   [JsonPropertyName("$schema")]
-  public string Schema { get; set; } = "./schema.schema.json";
+  public string Schema { get; init; } = "./schema.schema.json";
 
   [JsonPropertyName("version")]
-  public string Version { get; set; } = SchemaToolsDefaults.MetadataVersion;
+  public string Version { get; init; } = SchemaToolsDefaults.MetadataVersion;
 
   [JsonPropertyName("generatedAt")]
-  public DateTime GeneratedAt { get; set; }
+  public DateTime GeneratedAt { get; init; }
 
   [JsonPropertyName("generatedBy")]
-  public string GeneratedBy { get; set; } = "SchemaMetadataExtractor";
+  public string GeneratedBy { get; init; } = "SchemaMetadataExtractor";
 
   [JsonPropertyName("database")]
-  public string Database { get; set; } = "Database";
+  public string Database { get; init; } = "Database";
 
   [JsonPropertyName("defaultSchema")]
-  public string DefaultSchema { get; set; } = SchemaToolsDefaults.DefaultSchema;
+  public string DefaultSchema { get; init; } = SchemaToolsDefaults.DefaultSchema;
 
   [JsonPropertyName("sqlServerVersion")]
-  public string SqlServerVersion { get; set; } = SchemaToolsDefaults.SqlServerVersion;
+  public SqlServerVersion SqlServerVersion { get; init; } = SqlServerVersion.Sql170;
 
   [JsonPropertyName("tables")]
-  public List<TableMetadata> Tables { get; set; } = new();
+  public IReadOnlyList<TableMetadata> Tables { get; init; } = [];
 
   [JsonPropertyName("statistics")]
-  public SchemaStatistics Statistics { get; set; } = new();
+  public SchemaStatistics Statistics { get; init; } = new();
 
   [JsonPropertyName("categories")]
-  public Dictionary<string, string> Categories { get; set; } = new();
+  public IReadOnlyDictionary<string, string> Categories { get; init; } = new Dictionary<string, string>();
 }
 
-public class SchemaStatistics
+public sealed record SchemaStatistics
 {
   [JsonPropertyName("totalTables")]
-  public int TotalTables { get; set; }
+  public int TotalTables { get; init; }
 
   [JsonPropertyName("temporalTables")]
-  public int TemporalTables { get; set; }
+  public int TemporalTables { get; init; }
 
   [JsonPropertyName("softDeleteTables")]
-  public int SoftDeleteTables { get; set; }
+  public int SoftDeleteTables { get; init; }
 
   [JsonPropertyName("appendOnlyTables")]
-  public int AppendOnlyTables { get; set; }
+  public int AppendOnlyTables { get; init; }
 
   [JsonPropertyName("polymorphicTables")]
-  public int PolymorphicTables { get; set; }
+  public int PolymorphicTables { get; init; }
 
   [JsonPropertyName("totalColumns")]
-  public int TotalColumns { get; set; }
+  public int TotalColumns { get; init; }
 
   [JsonPropertyName("totalConstraints")]
-  public int TotalConstraints { get; set; }
+  public int TotalConstraints { get; init; }
 }
