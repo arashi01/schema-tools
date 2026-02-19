@@ -55,7 +55,7 @@ internal static class AnalysisLoader
     {
       return OperationResult<SourceAnalysisResult>.Fail(new[]
       {
-        new GenerationError { Code = "ST3002", Message = $"Failed to deserialise analysis file: {filePath} — {ex.Message}" }
+        new GenerationError { Code = "ST3002", Message = $"Failed to deserialise analysis file: {filePath} - {ex.Message}" }
       });
     }
   }

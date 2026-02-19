@@ -255,6 +255,26 @@ public class DocumentationConfig
 
   [JsonPropertyName("includeIndexes")]
   public bool IncludeIndexes { get; set; } = false;
+
+  /// <summary>
+  /// Controls how temporal history tables appear in generated documentation.
+  /// </summary>
+  [JsonPropertyName("historyTables")]
+  public HistoryTableMode HistoryTables { get; set; } = HistoryTableMode.None;
+
+  /// <summary>
+  /// When enabled, infrastructure columns (soft-delete flags, temporal period columns,
+  /// audit trail columns) are visually grouped and styled distinctly from domain columns.
+  /// </summary>
+  [JsonPropertyName("infrastructureColumnStyling")]
+  public bool InfrastructureColumnStyling { get; set; } = true;
+
+  /// <summary>
+  /// When enabled, ER diagrams show only domain columns, excluding infrastructure
+  /// columns (soft-delete, temporal, audit) for diagram clarity.
+  /// </summary>
+  [JsonPropertyName("erDiagramDomainColumnsOnly")]
+  public bool ErDiagramDomainColumnsOnly { get; set; } = true;
 }
 
 /// <summary>

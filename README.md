@@ -12,7 +12,7 @@ MSBuild tasks for SQL Server schema metadata generation, validation, and documen
 - **Active-record views** - generated views filter to `record_active = 1`, eliminating manual `WHERE` clauses in application queries
 - **Deferred purge procedure** - FK-safe hard-deletion in topological order via `usp_purge_soft_deleted` stored procedure with configurable grace period
 - **Schema validation** - FK referential integrity, circular FK detection, `snake_case` naming conventions, temporal structure, audit columns, polymorphic structure, primary key presence
-- **Documentation** - Markdown with Mermaid ER diagrams, category grouping, statistics, constraints
+- **Documentation** - Markdown with Mermaid ER diagrams, category grouping, statistics, constraints, infrastructure column grouping, FK cross-reference links, history table modes (None/Compact/Full), cross-category ER stubs
 - **Pre-build/post-build pipeline** - triggers, procedures, and views generated pre-build (included in dacpac); validation and docs generated post-build from compiled dacpac
 
 ## Architecture Overview
@@ -101,8 +101,8 @@ Output strategy defaults by artifact:
 | Artifact      | Source Strategy      | Intermediate Strategy                   |
 | ------------- | -------------------- | --------------------------------------- |
 | Generated SQL | `Schema/_generated/` | `$(IntermediateOutputPath)SchemaTools/` |
-| Metadata JSON | `Build/schema.json`  | `$(IntermediateOutputPath)schema.json`  |
-| Docs          | `Docs/SCHEMA.md`     | `$(OutputPath)SCHEMA.md`                |
+| Metadata JSON | `schema.json`        | `$(IntermediateOutputPath)schema.json`  |
+| Docs          | `SCHEMA.md`          | `$(OutputPath)SCHEMA.md`                |
 
 The `SchemaToolsGeneratedOutput` property controls the shared output directory. Triggers, procedures, and views all default to this directory but can be individually overridden:
 
@@ -155,7 +155,10 @@ Create `schema-tools.json` in the project root. Contains schema semantics only (
     "includeErDiagrams": true,
     "includeStatistics": true,
     "includeConstraints": true,
-    "includeIndexes": false
+    "includeIndexes": false,
+    "historyTables": "None",
+    "infrastructureColumnStyling": true,
+    "erDiagramDomainColumnsOnly": true
   },
 
   "views": {
@@ -477,8 +480,8 @@ These properties are set in your `.sqlproj` file and control build integration.
 | `SchemaToolsTriggersOutput`   | `$(SchemaToolsGeneratedOutput)` | _(inherits from above)_                |
 | `SchemaToolsViewsOutput`      | `$(SchemaToolsGeneratedOutput)` | _(inherits from above)_                |
 | `SchemaToolsProceduresOutput` | `$(SchemaToolsGeneratedOutput)` | _(inherits from above)_                |
-| `SchemaToolsMetadataOutput`   | `Build\schema.json`             | `$(IntermediateOutputPath)schema.json` |
-| `SchemaToolsDocsOutput`       | `Docs\SCHEMA.md`                | `$(OutputPath)SCHEMA.md`               |
+| `SchemaToolsMetadataOutput`   | `schema.json`                    | `$(IntermediateOutputPath)schema.json` |
+| `SchemaToolsDocsOutput`       | `SCHEMA.md`                      | `$(OutputPath)SCHEMA.md`               |
 
 ### Features (JSON)
 
@@ -543,13 +546,49 @@ The following validations always run: primary key presence, circular FK detectio
 
 ### Documentation
 
-| Setting              | Default | Description                              |
-| -------------------- | ------- | ---------------------------------------- |
-| `enabled`            | `true`  | Generate Markdown documentation          |
-| `includeErDiagrams`  | `true`  | Include Mermaid ER diagrams per category |
-| `includeStatistics`  | `true`  | Include schema statistics summary        |
-| `includeConstraints` | `true`  | Include constraint details per table     |
-| `includeIndexes`     | `false` | Include index details per table          |
+| Setting                      | Default  | Description                                                                                      |
+| ---------------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `enabled`                    | `true`   | Generate Markdown documentation                                                                  |
+| `includeErDiagrams`          | `true`   | Include Mermaid ER diagrams per category                                                         |
+| `includeStatistics`          | `true`   | Include schema statistics summary                                                                |
+| `includeConstraints`         | `true`   | Include constraint details per table                                                             |
+| `includeIndexes`             | `false`  | Include index details per table                                                                  |
+| `historyTables`              | `"None"` | History table visibility: `None` (excluded), `Compact` (summary table), `Full` (full sections)   |
+| `infrastructureColumnStyling`| `true`   | Group infrastructure columns (soft-delete, audit, temporal) below a separator with auto-descriptions |
+| `erDiagramDomainColumnsOnly` | `true`   | ER diagrams show only domain columns, excluding infrastructure columns for clarity                |
+
+#### History Table Modes
+
+The `historyTables` setting controls how temporal history tables appear in generated documentation:
+
+| Mode      | Behaviour                                                                                                |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| `None`    | History tables are excluded from documentation entirely. History table references render as plain text.   |
+| `Compact` | History tables are excluded from per-table sections but summarised in a dedicated "History Tables" table. |
+| `Full`    | History tables are documented as full sections alongside authored tables.                                 |
+
+#### Infrastructure Column Grouping
+
+When `infrastructureColumnStyling` is enabled, column tables visually separate domain columns from infrastructure columns (soft-delete flags, audit trail, temporal period columns) using a separator row. Infrastructure columns receive auto-generated descriptions:
+
+| Column Type         | Auto-Description         |
+| ------------------- | ------------------------ |
+| Active flag         | Soft-delete flag         |
+| Created-at          | Creation timestamp       |
+| Created-by          | Creator reference        |
+| Updated-by          | Last modifier reference  |
+| Period start        | Period start             |
+| Period end          | Period end               |
+
+Explicit `@description` annotations always take precedence over auto-descriptions.
+
+#### FK Cross-References
+
+Foreign key columns and constraints that reference documented tables render as Markdown anchor links (e.g. `FK -> [users](#users)`). References to undocumented tables render as plain text.
+
+#### Cross-Category ER Stubs
+
+When a table has a foreign key to a table in a different category, the ER diagram for the referencing category includes a minimal stub entity (primary key columns only) for the referenced table, with a relationship line. This provides FK context without duplicating the full entity definition.
 
 ### Columns
 
@@ -679,8 +718,8 @@ Detected when a non-temporal table has the configured `createdAt` column (defaul
 | `SchemaToolsConfig`           | `$(MSBuildProjectDirectory)\schema-tools.json` | Configuration file                  |
 | `SchemaToolsAnalysisOutput`   | `$(IntermediateOutputPath)analysis.json`       | Pre-build analysis (intermediate)   |
 | `SchemaToolsGeneratedOutput`  | `$(MSBuildProjectDirectory)\Schema\_generated` | Shared output dir for generated SQL |
-| `SchemaToolsMetadataOutput`   | `$(MSBuildProjectDirectory)\Build\schema.json` | Post-build metadata from dacpac     |
-| `SchemaToolsDocsOutput`       | `$(MSBuildProjectDirectory)\Docs\SCHEMA.md`    | Generated documentation             |
+| `SchemaToolsMetadataOutput`   | `$(MSBuildProjectDirectory)\schema.json`        | Post-build metadata from dacpac     |
+| `SchemaToolsDocsOutput`       | `$(MSBuildProjectDirectory)\SCHEMA.md`          | Generated documentation             |
 | `SchemaToolsTriggersOutput`   | `$(SchemaToolsGeneratedOutput)`                | Generated triggers (overridable)    |
 | `SchemaToolsViewsOutput`      | `$(SchemaToolsGeneratedOutput)`                | Generated views (overridable)       |
 | `SchemaToolsProceduresOutput` | `$(SchemaToolsGeneratedOutput)`                | Generated procedures (overridable)  |
@@ -751,10 +790,8 @@ Schema/
     my_custom_triggers.sql                     <- Your triggers (takes precedence)
   Views/
     my_custom_views.sql                        <- Your views (takes precedence)
-Build/
-  schema.json                                  <- Post-build extracted metadata
-Docs/
-  SCHEMA.md                                    <- Generated documentation
+schema.json                                      <- Post-build extracted metadata
+SCHEMA.md                                        <- Generated documentation
 ```
 
 ### Overriding a Generated Trigger
@@ -803,7 +840,7 @@ This regenerates files in `_generated/` but still respects explicit triggers els
 
 ## Generated Metadata
 
-Post-build, `Build/schema.json` is extracted from the compiled `.dacpac`:
+Post-build, `schema.json` is extracted from the compiled `.dacpac` to the project root:
 
 ```json
 {

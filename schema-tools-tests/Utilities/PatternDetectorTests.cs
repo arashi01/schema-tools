@@ -7,7 +7,7 @@ namespace SchemaTools.Tests.Utilities;
 /// <summary>
 /// Tests for the pure <see cref="PatternDetector"/> static class.
 /// <see cref="PatternDetector.DetectTablePatterns"/> returns a new
-/// <see cref="TableMetadata"/> — all assertions must target the return value.
+/// <see cref="TableMetadata"/> -- all assertions must target the return value.
 /// <see cref="PatternDetector.MarkHistoryTables"/> takes and returns
 /// <c>IReadOnlyList&lt;TableMetadata&gt;</c>.
 /// </summary>
@@ -64,9 +64,9 @@ public class PatternDetectorTests
   public class DetectTablePatternsTests : PatternDetectorTests
   {
     [Theory]
-    [InlineData(true, true, true, "both active column and temporal → soft-delete")]
-    [InlineData(false, true, false, "no active column → no soft-delete")]
-    [InlineData(true, false, false, "no temporal → no soft-delete")]
+    [InlineData(true, true, true, "both active column and temporal -> soft-delete")]
+    [InlineData(false, true, false, "no active column -> no soft-delete")]
+    [InlineData(true, false, false, "no temporal -> no soft-delete")]
     public void SoftDelete_RequiresBothActiveColumnAndTemporal(
       bool hasActiveColumn, bool hasTemporal, bool expectedSoftDelete, string because)
     {
@@ -100,9 +100,9 @@ public class PatternDetectorTests
     }
 
     [Theory]
-    [InlineData(true, false, false, true, "created_at + no updated_by + no temporal → append-only")]
-    [InlineData(true, true, false, false, "has updated_by → not append-only")]
-    [InlineData(true, false, true, false, "has temporal → not append-only")]
+    [InlineData(true, false, false, true, "created_at + no updated_by + no temporal -> append-only")]
+    [InlineData(true, true, false, false, "has updated_by -> not append-only")]
+    [InlineData(true, false, true, false, "has temporal -> not append-only")]
     public void AppendOnly_RequiresCreatedAtAndNoUpdatedByAndNoTemporal(
       bool hasCreatedAt, bool hasUpdatedBy, bool hasTemporal, bool expectedAppendOnly, string because)
     {

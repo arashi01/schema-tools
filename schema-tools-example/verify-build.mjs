@@ -91,12 +91,12 @@ if (existsSync(triggerFile)) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Post-build metadata - Build/schema.json
+// 3. Post-build metadata - schema.json (project root)
 // ---------------------------------------------------------------------------
 console.log("\n--- Post-Build Metadata ---");
 
-const metadataPath = join(root, "Build", "schema.json");
-assert(existsSync(metadataPath), "Build/schema.json exists");
+const metadataPath = join(root, "schema.json");
+assert(existsSync(metadataPath), "schema.json exists at project root");
 
 if (existsSync(metadataPath)) {
   const raw = readFileSync(metadataPath, "utf8").replace(/^\uFEFF/, "");
@@ -108,17 +108,22 @@ if (existsSync(metadataPath)) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Documentation - Docs/SCHEMA.md
+// 4. Documentation - SCHEMA.md (project root)
 // ---------------------------------------------------------------------------
 console.log("\n--- Documentation ---");
 
-const docsPath = join(root, "Docs", "SCHEMA.md");
-assert(existsSync(docsPath), "Docs/SCHEMA.md exists");
+const docsPath = join(root, "SCHEMA.md");
+assert(existsSync(docsPath), "SCHEMA.md exists at project root");
 
 if (existsSync(docsPath)) {
   const content = readFileSync(docsPath, "utf8");
   assert(content.length > 500, "SCHEMA.md has substantial content");
-  assert(content.includes("## "), "SCHEMA.md has Markdown headings");
+  assert(content.includes("# Database Schema Documentation"), "SCHEMA.md has title heading");
+  assert(content.includes("## Table of Contents"), "SCHEMA.md has table of contents");
+  assert(content.includes("## Statistics"), "SCHEMA.md has statistics section");
+  assert(content.includes("| Tables |"), "SCHEMA.md has tables statistic");
+  // Default config: history mode = None, so no history tables section
+  assert(!content.includes("## History Tables"), "SCHEMA.md excludes history tables section (default mode)");
 }
 
 // ---------------------------------------------------------------------------

@@ -57,7 +57,7 @@ internal static class MetadataLoader
     {
       return OperationResult<SchemaMetadata>.Fail(new[]
       {
-        new ExtractionError { Code = "ST4002", Message = $"Failed to deserialise metadata file: {metadataFile} — {ex.Message}" }
+        new ExtractionError { Code = "ST4002", Message = $"Failed to deserialise metadata file: {metadataFile} - {ex.Message}" }
       });
     }
   }

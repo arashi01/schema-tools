@@ -44,8 +44,8 @@
     <SchemaToolsTriggersOutput Condition="'$(SchemaToolsTriggersOutput)' == ''">$(SchemaToolsGeneratedOutput)</SchemaToolsTriggersOutput>
     <SchemaToolsProceduresOutput Condition="'$(SchemaToolsProceduresOutput)' == ''">$(SchemaToolsGeneratedOutput)</SchemaToolsProceduresOutput>
     <SchemaToolsViewsOutput Condition="'$(SchemaToolsViewsOutput)' == ''">$(SchemaToolsGeneratedOutput)</SchemaToolsViewsOutput>
-    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(MSBuildProjectDirectory)\Build\schema.json</SchemaToolsMetadataOutput>
-    <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(MSBuildProjectDirectory)\Docs\SCHEMA.md</SchemaToolsDocsOutput>
+    <SchemaToolsMetadataOutput Condition="'$(SchemaToolsMetadataOutput)' == ''">$(MSBuildProjectDirectory)\schema.json</SchemaToolsMetadataOutput>
+    <SchemaToolsDocsOutput Condition="'$(SchemaToolsDocsOutput)' == ''">$(MSBuildProjectDirectory)\SCHEMA.md</SchemaToolsDocsOutput>
   </PropertyGroup>
 
   <!-- Strategy: Intermediate - paths in obj/bin directories (transient, not committed) -->
