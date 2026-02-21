@@ -25,7 +25,7 @@ public class SqlTriggerGeneratorTests : IDisposable
 
   private static SourceAnalysisResult CreateAnalysis(params TableAnalysis[] tables) => new()
   {
-    Version = "1.0.0",
+    ToolVersion = "1.0.0",
     AnalysedAt = DateTime.UtcNow,
     DefaultSchema = "test",
     Tables = [.. tables]

@@ -198,7 +198,7 @@ public class MarkdownDocumentationGenerator : MSTask
     md.AppendLine();
     md.AppendLine($"**Database:** {metadata.Database}  ");
     md.AppendLine($"**Generated:** {metadata.GeneratedAt:yyyy-MM-dd HH:mm:ss} UTC  ");
-    md.AppendLine($"**Schema Version:** {metadata.Version}  ");
+    md.AppendLine($"**Tool Version:** {metadata.ToolVersion}  ");
     md.AppendLine($"**SQL Server:** {metadata.SqlServerVersion}");
     md.AppendLine();
   }

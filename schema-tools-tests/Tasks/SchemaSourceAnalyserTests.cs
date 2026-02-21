@@ -531,7 +531,7 @@ CREATE TABLE [dbo].[meta]([id] UNIQUEIDENTIFIER PRIMARY KEY);
 
     SourceAnalysisResult? analysis = ReadAnalysisResult();
 
-    analysis!.Version.Should().NotBeNullOrEmpty();
+    analysis!.ToolVersion.Should().NotBeNullOrEmpty();
     analysis.SqlServerVersion.Should().Be(Models.SqlServerVersion.Sql170);
     analysis.DefaultSchema.Should().Be("dbo");
     analysis.AnalysedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));

@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.SqlServer.Dac.Model;
 using SchemaTools.Configuration;
 using SchemaTools.Models;
@@ -136,9 +135,9 @@ internal sealed class DacpacMetadataEngine
 
       SchemaMetadata metadata = new SchemaMetadata
       {
-        Version = GetAssemblyVersion(),
+        ToolVersion = GenerationUtilities.GetToolVersion(),
         GeneratedAt = DateTime.UtcNow,
-        GeneratedBy = "SchemaMetadataExtractor (DacFx)",
+        GeneratedBy = "SchemaTools",
         Database = _config.Database ?? _databaseName,
         DefaultSchema = _config.DefaultSchema,
         SqlServerVersion = _sqlVersion,
@@ -528,9 +527,15 @@ internal sealed class DacpacMetadataEngine
       if (genType != null)
       {
         string genStr = genType.ToString() ?? "";
+        // DacFx uses "AsRowStart"/"AsRowEnd" names; strip the "As" prefix
+        // to match our RowStart/RowEnd enum values.
+        if (genStr.StartsWith("As", StringComparison.Ordinal) && genStr.Length > 2)
+          genStr = genStr[2..];
+
         if (!string.IsNullOrEmpty(genStr) && !string.Equals(genStr, "None", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(genStr, "0", StringComparison.Ordinal)
-            && Enum.TryParse<Models.GeneratedAlwaysType>(genStr, out Models.GeneratedAlwaysType parsedGenType))
+            && Enum.TryParse<Models.GeneratedAlwaysType>(genStr, out Models.GeneratedAlwaysType parsedGenType)
+            && Enum.IsDefined(typeof(Models.GeneratedAlwaysType), parsedGenType))
         {
           isGeneratedAlways = true;
           generatedAlwaysType = parsedGenType;
@@ -1047,11 +1052,5 @@ internal sealed class DacpacMetadataEngine
     };
   }
 
-  private static string GetAssemblyVersion()
-  {
-    return typeof(DacpacMetadataEngine).Assembly
-      .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-      ?? typeof(DacpacMetadataEngine).Assembly.GetName().Version?.ToString()
-      ?? "0.0.0";
-  }
+
 }

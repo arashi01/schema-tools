@@ -101,7 +101,7 @@ assert(existsSync(metadataPath), "schema.json exists at project root");
 if (existsSync(metadataPath)) {
   const raw = readFileSync(metadataPath, "utf8").replace(/^\uFEFF/, "");
   const metadata = JSON.parse(raw);
-  assert(metadata.$schema === "./schema.schema.json", "$schema value correct");
+  assert(!metadata.$schema, "$schema property not emitted (no schema file yet)");
   assert(Array.isArray(metadata.tables), "tables array present");
   assert(metadata.tables.length > 0, "At least one table in metadata");
   assert(metadata.statistics != null, "statistics object present");

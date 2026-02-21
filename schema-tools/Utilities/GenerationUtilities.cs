@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System.Reflection;
+using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -13,13 +15,14 @@ internal static class GenerationUtilities
   /// <summary>
   /// Standard JSON serialisation options for all SchemaTools output files
   /// (schema.json, analysis.json). Produces indented, camelCase JSON with
-  /// null properties omitted.
+  /// null properties omitted and no unnecessary Unicode escaping.
   /// </summary>
   internal static readonly JsonSerializerOptions SerialiseOptions = new()
   {
     WriteIndented = true,
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
   };
 
   /// <summary>
@@ -31,6 +34,23 @@ internal static class GenerationUtilities
     EnsureDirectoryExists(filePath);
     string json = JsonSerializer.Serialize(value, SerialiseOptions);
     File.WriteAllText(filePath, json, Encoding.UTF8);
+  }
+
+  /// <summary>
+  /// Returns the SchemaTools package version (major.minor.patch[-prerelease])
+  /// stripped of any semver build metadata (<c>+commitsha</c>) suffix.
+  /// Falls back to the assembly file version, then <c>"0.0.0"</c>.
+  /// </summary>
+  internal static string GetToolVersion()
+  {
+    string version = typeof(GenerationUtilities).Assembly
+      .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+      ?? typeof(GenerationUtilities).Assembly.GetName().Version?.ToString()
+      ?? "0.0.0";
+
+    // Strip semver build metadata (everything after '+')
+    int plusIndex = version.IndexOf('+');
+    return plusIndex >= 0 ? version[..plusIndex] : version;
   }
 
   /// <summary>

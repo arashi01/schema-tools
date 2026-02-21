@@ -7,7 +7,7 @@
 /// </summary>
 public sealed record SourceAnalysisResult
 {
-  public string Version { get; init; } = SchemaToolsDefaults.MetadataVersion;
+  public string ToolVersion { get; init; } = SchemaToolsDefaults.MetadataVersion;
   public DateTime AnalysedAt { get; init; }
   public SqlServerVersion SqlServerVersion { get; init; } = SqlServerVersion.Sql170;
   public string DefaultSchema { get; init; } = SchemaToolsDefaults.DefaultSchema;

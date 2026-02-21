@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using Microsoft.Build.Framework;
+﻿using Microsoft.Build.Framework;
 using Microsoft.SqlServer.TransactSql.ScriptDom;
 using SchemaTools.Annotations;
 using SchemaTools.Configuration;
@@ -118,7 +117,7 @@ public class SchemaSourceAnalyser : MSTask
 
       SourceAnalysisResult analysis = new SourceAnalysisResult
       {
-        Version = GetAssemblyVersion(),
+        ToolVersion = GenerationUtilities.GetToolVersion(),
         AnalysedAt = DateTime.UtcNow,
         SqlServerVersion = _config.SqlServerVersion,
         DefaultSchema = _config.DefaultSchema,
@@ -513,13 +512,5 @@ public class SchemaSourceAnalyser : MSTask
       result.Add(table with { IsLeafTable = table.ChildTables.Count == 0 });
     }
     return result;
-  }
-
-  private static string GetAssemblyVersion()
-  {
-    return typeof(SchemaSourceAnalyser).Assembly
-      .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-      ?? typeof(SchemaSourceAnalyser).Assembly.GetName().Version?.ToString()
-      ?? "0.0.0";
   }
 }

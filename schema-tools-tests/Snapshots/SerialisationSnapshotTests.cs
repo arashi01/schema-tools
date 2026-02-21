@@ -59,7 +59,7 @@ public class SerialisationSnapshotTests
         totalConstraints: 3)
       .Configure(m => m with
       {
-        Version = "1.0.0-snapshot",
+        ToolVersion = "1.0.0-snapshot",
         GeneratedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
         GeneratedBy = "SnapshotTest"
       })
@@ -111,7 +111,7 @@ public class SerialisationSnapshotTests
         "_generated/Views")
       .Configure(a => a with
       {
-        Version = "1.0.0-snapshot",
+        ToolVersion = "1.0.0-snapshot",
         AnalysedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
       })
       .Build();

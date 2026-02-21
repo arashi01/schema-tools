@@ -162,7 +162,7 @@ public class MarkdownDocumentationGeneratorTests
     {
       Database = "TestDb",
       GeneratedAt = new DateTime(2024, 1, 15, 10, 0, 0, DateTimeKind.Utc),
-      Version = "1.0.0",
+      ToolVersion = "1.0.0",
       Tables = tables,
       Categories = new Dictionary<string, string>
       {
@@ -263,7 +263,7 @@ public class MarkdownDocumentationGeneratorTests
     md.Should().Contain("# Database Schema Documentation");
     md.Should().Contain("**Database:** TestDb");
     md.Should().Contain("**Generated:** 2024-01-15 10:00:00 UTC");
-    md.Should().Contain("**Schema Version:** 1.0.0");
+    md.Should().Contain("**Tool Version:** 1.0.0");
   }
 
   [Fact]
