@@ -9,10 +9,10 @@ namespace SchemaTools.Models;
 public enum GeneratedAlwaysType
 {
   /// <summary>Period start column (GENERATED ALWAYS AS ROW START).</summary>
-  RowStart,
+  RowStart = 1,
 
   /// <summary>Period end column (GENERATED ALWAYS AS ROW END).</summary>
-  RowEnd
+  RowEnd = 2
 }
 
 public sealed record ColumnMetadata

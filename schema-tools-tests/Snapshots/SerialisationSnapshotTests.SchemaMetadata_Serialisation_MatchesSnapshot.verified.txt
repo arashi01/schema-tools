@@ -1,6 +1,5 @@
 ﻿{
-  $schema: ./schema.schema.json,
-  version: 1.0.0-snapshot,
+  toolVersion: 1.0.0-snapshot,
   generatedAt: DateTimeOffset_1,
   generatedBy: SnapshotTest,
   database: SnapshotTestDB,

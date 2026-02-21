@@ -5,16 +5,16 @@ namespace SchemaTools.Models;
 public sealed record SchemaMetadata
 {
   [JsonPropertyName("$schema")]
-  public string Schema { get; init; } = "./schema.schema.json";
+  public string? Schema { get; init; }
 
-  [JsonPropertyName("version")]
-  public string Version { get; init; } = SchemaToolsDefaults.MetadataVersion;
+  [JsonPropertyName("toolVersion")]
+  public string ToolVersion { get; init; } = SchemaToolsDefaults.MetadataVersion;
 
   [JsonPropertyName("generatedAt")]
   public DateTime GeneratedAt { get; init; }
 
   [JsonPropertyName("generatedBy")]
-  public string GeneratedBy { get; init; } = "SchemaMetadataExtractor";
+  public string GeneratedBy { get; init; } = "SchemaTools";
 
   [JsonPropertyName("database")]
   public string Database { get; init; } = "Database";
