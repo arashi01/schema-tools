@@ -103,7 +103,7 @@ function Get-ScalarLine([object]$Lines) {
   #>
   if ($null -eq $Lines) { return '' }
   $s = if ($Lines -is [string]) { $Lines } else { $Lines | Select-Object -First 1 }
-  return if ($s) { "$s".Trim() } else { '' }
+  if ($s) { return "$s".Trim() } else { return '' }
 }
 
 # --- Prerequisites -----------------------------------------------------------
