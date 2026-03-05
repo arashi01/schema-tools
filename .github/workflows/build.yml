@@ -48,7 +48,7 @@ jobs:
         run: dotnet test --no-build -c ${{ env.CONFIGURATION }} --logger trx --results-directory TestResults
 
       - name: Upload test results
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: test-results
@@ -61,7 +61,7 @@ jobs:
 
       - name: Upload package artifacts
         if: github.event_name == 'push'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: packages
           path: artifacts/*
